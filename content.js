@@ -26,13 +26,6 @@ class ExoticAutoclicker {
     this.loadConfig();
   }
 
-}
-
-// Ограничение: только payout_transaction
-if (window.location.href.startsWith('https://exotic.company/operator/payout_transaction')) {
-  new ExoticAutoclicker();
-}
-
   showToast(text) {
     try {
       const existing = document.querySelector('.exotic-toast');
@@ -431,46 +424,9 @@ if (window.location.href.startsWith('https://exotic.company/operator/payout_tran
     } catch (error) {
     }
   }
-
-  showToast(text) {
-    try {
-      const existing = document.querySelector('.exotic-toast');
-      if (existing) existing.remove();
-
-      const toast = document.createElement('div');
-      toast.className = 'exotic-toast';
-      toast.textContent = text;
-      Object.assign(toast.style, {
-        position: 'fixed',
-        bottom: '16px',
-        right: '16px',
-        maxWidth: '320px',
-        padding: '12px 16px',
-        background: 'rgba(0,0,0,0.82)',
-        color: '#fff',
-        borderRadius: '10px',
-        boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
-        fontSize: '14px',
-        lineHeight: '1.4',
-        zIndex: '2147483647',
-        opacity: '0',
-        transform: 'translateY(12px)',
-        transition: 'opacity 0.2s ease, transform 0.2s ease'
-      });
-      document.body.appendChild(toast);
-      requestAnimationFrame(() => {
-        toast.style.opacity = '1';
-        toast.style.transform = 'translateY(0)';
-      });
-      setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateY(12px)';
-        setTimeout(() => toast.remove(), 250);
-      }, 2500);
-    } catch (e) {
-      console.log('Не удалось показать toast:', e);
-    }
-  }
 }
 
-new ExoticAutoclicker();
+// Ограничение: только payout_transaction
+if (window.location.href.startsWith('https://exotic.company/operator/payout_transaction')) {
+  new ExoticAutoclicker();
+}
