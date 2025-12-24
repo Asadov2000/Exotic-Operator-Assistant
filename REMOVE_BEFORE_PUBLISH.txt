@@ -1,0 +1,16 @@
+Удалите перед публикацией:
+- server/ (worker.js, wrangler.toml, README.md)
+- README.md, DEPLOY.md, PUBLISHING.md, PRIVACY.md, PRIVACY_POLICY.md
+- .venv/
+
+Для Chrome Web Store оставьте только:
+- manifest.json
+- background.js
+- content.js
+- notifications.js
+- options.html
+- options.js
+- popup.html
+- popup.js
+- styles.css
+- icons/
