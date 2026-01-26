@@ -582,9 +582,26 @@ async function getUserInfo(env, target) {
   };
 }
 
-// Rate limiting константы
+// ========== СИСТЕМА ВЕРСИОНИРОВАНИЯ ЛИЦЕНЗИЙ ==========
+// Для мгновенной синхронизации между ботом и расширением
+// При изменении лицензии увеличивается версия, расширение сравнивает версии
+
+async function incrementLicenseVersion(env, telegramId) {
+  const versionKey = `license_version:${telegramId}`;
+  const currentVersion = parseInt(await env.USERS.get(versionKey) || '0');
+  const newVersion = currentVersion + 1;
+  await env.USERS.put(versionKey, String(newVersion), { expirationTtl: 86400 * 90 }); // 90 дней TTL
+  return newVersion;
+}
+
+async function getLicenseVersion(env, telegramId) {
+  const versionKey = `license_version:${telegramId}`;
+  return parseInt(await env.USERS.get(versionKey) || '0');
+}
+
+// Rate limiting константы (оптимизировано для 100+ пользователей)
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 минута
-const RATE_LIMIT_MAX_REQUESTS = 60; // Максимум запросов в минуту
+const RATE_LIMIT_MAX_REQUESTS = 120; // Увеличено до 120 запросов в минуту на IP
 
 // Telegram IP ranges (для верификации webhook)
 // Официальные IP Telegram: https://core.telegram.org/bots/webhooks#the-short-version
@@ -996,9 +1013,9 @@ async function getLicenseData(env, oderId) {
 
 async function handleLicenseCheck(request, env) {
   try {
-    // Rate limiting по IP
+    // Rate limiting по IP (увеличено для 100+ пользователей)
     const clientIP = request.headers.get('CF-Connecting-IP') || 'unknown';
-    const rateLimit = await checkRateLimit(env, `license:${clientIP}`);
+    const rateLimit = await checkRateLimit(env, `license:${clientIP}`, 200); // 200 запросов/мин
     if (!rateLimit.allowed) {
       return jsonResponse({ 
         valid: false, 
@@ -1174,9 +1191,9 @@ async function handleGenerateCode(request, env) {
 
 async function handleStatus(request, env) {
   try {
-    // Rate limiting - увеличенный лимит для частых проверок подключения
+    // Rate limiting - увеличенный лимит для 100+ пользователей
     const clientIP = request.headers.get('CF-Connecting-IP') || 'unknown';
-    const rateLimit = await checkRateLimit(env, `status:${clientIP}`, 120); // 120 запросов в минуту
+    const rateLimit = await checkRateLimit(env, `status:${clientIP}`, 300); // 300 запросов в минуту
     if (!rateLimit.allowed) {
       return jsonResponse({ error: 'RATE_LIMITED' }, 429);
     }
@@ -4881,6 +4898,10 @@ _Для покупки напишите в поддержку_ 👇`;
             );
           }
         }
+        
+        // ВАЖНО: Увеличиваем версию лицензии для мгновенной синхронизации с расширением
+        await incrementLicenseVersion(env, targetTelegramId);
+        
       } else if (targetUsername) {
         // Сохраняем по username для последующей активации
         await env.USERS.put(`license:${targetUsername.toLowerCase()}`, JSON.stringify(licenseData));
@@ -4952,15 +4973,24 @@ _Для покупки напишите в поддержку_ 👇`;
       
       // Удаляем лицензию
       let deleted = false;
+      let revokedTelegramId = null;
+      
       if (userInfo.found && userInfo.telegramId) {
         await env.USERS.delete(`license:tg:${userInfo.telegramId}`);
+        revokedTelegramId = userInfo.telegramId;
         deleted = true;
       } else if (isTelegramId) {
         await env.USERS.delete(`license:tg:${target}`);
+        revokedTelegramId = target;
         deleted = true;
       } else {
         await env.USERS.delete(`license:${target.toLowerCase()}`);
         deleted = true;
+      }
+      
+      // ВАЖНО: Увеличиваем версию лицензии для мгновенной синхронизации с расширением
+      if (revokedTelegramId) {
+        await incrementLicenseVersion(env, revokedTelegramId);
       }
       
       const displayUser = userInfo.found ? 
@@ -6587,6 +6617,34 @@ export default {
       if (path === '/api/license/check' && request.method === 'POST') {
         return await handleLicenseCheck(request, env);
       }
+      
+      // ========== БЫСТРАЯ ПРОВЕРКА ВЕРСИИ ЛИЦЕНЗИИ ==========
+      // Легковесный endpoint для частых проверок синхронизации
+      // Возвращает только версию, расширение сравнивает с локальной
+      if (path === '/api/license/version' && request.method === 'POST') {
+        const { data } = await safeParseJson(request);
+        const { oderId } = data || {};
+        
+        if (!oderId || !isValidOderId(oderId)) {
+          return jsonResponse({ error: 'Invalid oderId' }, 400);
+        }
+        
+        // Получаем telegramId по oderId
+        const userData = await env.USERS.get(`user:${oderId}`);
+        if (!userData) {
+          return jsonResponse({ connected: false, version: 0 });
+        }
+        
+        const user = JSON.parse(userData);
+        const version = await getLicenseVersion(env, user.telegramId);
+        
+        return jsonResponse({ 
+          connected: true, 
+          version,
+          timestamp: Date.now()
+        });
+      }
+      
       if (path === '/api/generate-code' && request.method === 'POST') {
         return await handleGenerateCode(request, env);
       }

@@ -2,7 +2,8 @@ const api = globalThis.browser ?? chrome;
 
 // ========== КОНСТАНТЫ (из constants.js) ==========
 const TELEGRAM_SERVER = 'https://exotic-telegram.mabastik.workers.dev';
-const LICENSE_CHECK_INTERVAL = 5 * 60 * 1000; // 5 минут
+const LICENSE_CHECK_INTERVAL = 5 * 60 * 1000; // 5 минут - полная проверка
+const LICENSE_SYNC_INTERVAL = 30 * 1000; // 30 секунд - быстрая проверка версии
 const TAB_MONITOR_INTERVAL = 5000;
 const KEEP_ALIVE_INTERVAL_MINUTES = 0.4; // ~25 секунд
 const AUTO_SAVE_DELAY = 300; // мс
@@ -12,7 +13,7 @@ const MAX_STATS_DAYS = 90;
 
 // ========== RATE LIMITER ==========
 const RATE_LIMIT = {
-  requests: 60,      // Максимум запросов
+  requests: 120,     // Увеличено для поддержки 100 пользователей
   windowMs: 60000,   // За минуту
   requestLog: []     // Лог запросов
 };
@@ -88,7 +89,8 @@ const DEFAULT_STATE = {
     expiresAt: null,
     daysLeft: 0,
     lastCheck: 0,
-    error: null
+    error: null,
+    version: 0  // Версия лицензии для синхронизации
   },
   stats: {
     totalClicks: 0,
@@ -320,10 +322,52 @@ class BackgroundService {
     }
   }
 
+  // ========== БЫСТРАЯ СИНХРОНИЗАЦИЯ ЛИЦЕНЗИИ ==========
+  // Проверяет только версию, если изменилась - делает полную проверку
+  async quickLicenseSync() {
+    const { telegramUserId } = this.state.settings;
+    
+    if (!telegramUserId) return;
+    
+    try {
+      const response = await fetch(`${TELEGRAM_SERVER}/api/license/version`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oderId: telegramUserId })
+      });
+      
+      if (!response.ok) return;
+      
+      const data = await response.json();
+      
+      if (!data.connected) return;
+      
+      // Если версия изменилась - делаем полную проверку
+      const currentVersion = this.state.license.version || 0;
+      if (data.version > currentVersion) {
+        console.log(`[Exotic] License version changed: ${currentVersion} -> ${data.version}`);
+        await this.checkLicense();
+        
+        // Сохраняем новую версию
+        this.state.license.version = data.version;
+        this.scheduleSave();
+      }
+    } catch (error) {
+      // Игнорируем ошибки быстрой синхронизации
+      console.log('Quick sync error:', error.message);
+    }
+  }
+
   startLicenseMonitor() {
+    // Полная проверка каждые 5 минут
     setInterval(() => {
       this.checkLicense();
     }, LICENSE_CHECK_INTERVAL);
+    
+    // Быстрая синхронизация версии каждые 30 секунд
+    setInterval(() => {
+      this.quickLicenseSync();
+    }, LICENSE_SYNC_INTERVAL);
   }
 
   async loadState() {
