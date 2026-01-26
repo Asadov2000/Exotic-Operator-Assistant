@@ -476,6 +476,13 @@ class OptionsController {
                 statusEl.style.color = 'var(--success)';
                 
                 this.showConnected(data.username || data.telegramId);
+                
+                // ПРИНУДИТЕЛЬНО обновляем лицензию в background.js
+                await this.sendMessage({ action: 'forceCheckLicense' });
+                
+                // Небольшая задержка для синхронизации
+                await new Promise(r => setTimeout(r, 500));
+                
                 await this.loadLicense();
                 this.resetCodeUI();
                 
@@ -554,6 +561,13 @@ class OptionsController {
                     statusEl.style.color = 'var(--success)';
                     
                     this.showConnected(data.username || data.telegramId);
+                    
+                    // ПРИНУДИТЕЛЬНО обновляем лицензию в background.js
+                    await this.sendMessage({ action: 'forceCheckLicense' });
+                    
+                    // Небольшая задержка для синхронизации
+                    await new Promise(r => setTimeout(r, 500));
+                    
                     await this.loadLicense();
                     this.resetCodeUI();
                     return;

@@ -522,6 +522,13 @@ class BackgroundService {
           sendResponse({ license: this.state.license });
           break;
           
+        case 'forceCheckLicense':
+          // Принудительная проверка лицензии после подключения Telegram
+          console.log('[Exotic] Force checking license after Telegram connect');
+          await this.checkLicense();
+          sendResponse({ license: this.state.license, success: true });
+          break;
+          
         case 'refreshLicense':
           await this.checkLicense();
           sendResponse({ license: this.state.license });
