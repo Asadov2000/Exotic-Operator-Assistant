@@ -4,13 +4,6 @@
 const BOT_VERSION = '5.0';
 const EXTENSION_VERSION = '5.0';
 
-// Глобальный статус бота (можно выключить через админ-команды)
-let BOT_ENABLED = true;
-
-// Белый список чатов (автоматическое одобрение, без запроса к админу)
-// Формат: chatId -> { owner: telegramId, addedAt, note }
-const WHITELISTED_CHATS = new Map();
-
 // ========== СИСТЕМА МЕТРИК ==========
 const metrics = {
   requests: { total: 0, success: 0, error: 0 },
@@ -587,16 +580,9 @@ const RATE_LIMIT_WINDOW = 60 * 1000; // 1 минута
 const RATE_LIMIT_MAX_REQUESTS = 60; // Максимум запросов в минуту
 
 // Telegram IP ranges (для верификации webhook)
-// Официальные IP Telegram: https://core.telegram.org/bots/webhooks#the-short-version
 const TELEGRAM_SUBNETS = [
   '149.154.160.0/20',
-  '91.108.4.0/22',
-  '91.108.8.0/22',
-  '91.108.12.0/22',
-  '91.108.16.0/22',
-  '91.108.20.0/22',
-  '91.108.56.0/22',
-  '185.76.151.0/24'
+  '91.108.4.0/22'
 ];
 
 // Проверка IP в подсети (простая реализация)
@@ -615,83 +601,7 @@ function isIPInSubnet(ip, subnet) {
 
 function isFromTelegram(ip) {
   if (!ip) return false;
-  // Cloudflare может проксировать запросы, поэтому IP может быть не Telegram
-  // Проверяем подсети Telegram
-  const isTelegramIP = TELEGRAM_SUBNETS.some(subnet => isIPInSubnet(ip, subnet));
-  return isTelegramIP;
-}
-
-// ========== УПРАВЛЕНИЕ БОТОМ ==========
-
-// Проверка статуса бота (включён/выключен)
-async function isBotEnabled(env) {
-  // Сначала проверяем in-memory флаг
-  if (!BOT_ENABLED) return false;
-  
-  // Затем проверяем KV (для персистентности)
-  const status = await env.USERS.get('bot:enabled');
-  return status !== 'false';
-}
-
-// Установить статус бота
-async function setBotEnabled(env, enabled) {
-  BOT_ENABLED = enabled;
-  await env.USERS.put('bot:enabled', String(enabled));
-}
-
-// ========== БЕЛЫЙ СПИСОК ЧАТОВ ==========
-
-// Проверка чата в белом списке
-async function isChatWhitelisted(env, chatId) {
-  const data = await env.USERS.get(`whitelist:chat:${chatId}`);
-  return data ? JSON.parse(data) : null;
-}
-
-// Добавить чат в белый список
-async function addChatToWhitelist(env, chatId, ownerTelegramId, note = '') {
-  const data = {
-    chatId: String(chatId),
-    owner: ownerTelegramId,
-    addedAt: Date.now(),
-    note: note
-  };
-  await env.USERS.put(`whitelist:chat:${chatId}`, JSON.stringify(data));
-  WHITELISTED_CHATS.set(String(chatId), data);
-  return data;
-}
-
-// Удалить чат из белого списка
-async function removeChatFromWhitelist(env, chatId) {
-  await env.USERS.delete(`whitelist:chat:${chatId}`);
-  WHITELISTED_CHATS.delete(String(chatId));
-}
-
-// Получить все чаты из белого списка
-async function getWhitelistedChats(env) {
-  // KV list не поддерживается напрямую, используем кэш или список ключей
-  // Возвращаем in-memory кэш
-  return Array.from(WHITELISTED_CHATS.values());
-}
-
-// Загрузить белый список из KV в память (вызывается при старте)
-async function loadWhitelistCache(env) {
-  // В Cloudflare Workers нет list(), поэтому используем отдельный индекс
-  const indexData = await env.USERS.get('whitelist:index');
-  if (indexData) {
-    const chatIds = JSON.parse(indexData);
-    for (const chatId of chatIds) {
-      const data = await env.USERS.get(`whitelist:chat:${chatId}`);
-      if (data) {
-        WHITELISTED_CHATS.set(chatId, JSON.parse(data));
-      }
-    }
-  }
-}
-
-// Сохранить индекс белого списка
-async function saveWhitelistIndex(env) {
-  const chatIds = Array.from(WHITELISTED_CHATS.keys());
-  await env.USERS.put('whitelist:index', JSON.stringify(chatIds));
+  return TELEGRAM_SUBNETS.some(subnet => isIPInSubnet(ip, subnet));
 }
 
 // Экранирование специальных символов Markdown для Telegram
@@ -734,55 +644,12 @@ async function checkRateLimit(env, identifier, maxRequests = RATE_LIMIT_MAX_REQU
   return { allowed: true, remaining: maxRequests - requests.length };
 }
 
-// ========== ВАЛИДАЦИЯ ВХОДНЫХ ДАННЫХ ==========
-
-// Санитизация строк (защита от injection)
-function sanitizeString(str, maxLength = 100) {
-  if (typeof str !== 'string') return '';
-  // Удаляем контрольные символы и ограничиваем длину
-  return str
-    .replace(/[\x00-\x1F\x7F]/g, '') // Удаляем контрольные символы
-    .trim()
-    .substring(0, maxLength);
-}
-
-// Валидация oderId (должен быть hex-строкой)
-function isValidOderId(oderId) {
-  if (typeof oderId !== 'string') return false;
-  // oderId должен быть 16-64 символа, hex или alphanumeric
-  return /^[a-f0-9A-Za-z\-]{16,64}$/.test(oderId);
-}
-
-// Валидация telegramId (только цифры)
-function isValidTelegramId(telegramId) {
-  if (!telegramId) return false;
-  return /^\d{1,20}$/.test(String(telegramId));
-}
-
-// Валидация username (Telegram формат)
-function isValidUsername(username) {
-  if (!username) return false;
-  // Telegram username: 5-32 символа, буквы, цифры и _
-  const clean = String(username).replace('@', '');
-  return /^[a-zA-Z][a-zA-Z0-9_]{4,31}$/.test(clean);
-}
-
-// Валидация кода привязки
-function isValidBindCode(code) {
-  if (!code || typeof code !== 'string') return false;
-  return /^[A-Z0-9]{8}$/i.test(code);
-}
-
 // Безопасный парсинг JSON
 async function safeParseJson(request) {
   try {
     const text = await request.text();
     if (!text || text.trim() === '') {
       return { data: null, error: 'Empty request body' };
-    }
-    // Ограничиваем размер тела запроса (защита от DoS)
-    if (text.length > 100000) { // 100KB max
-      return { data: null, error: 'Request body too large' };
     }
     return { data: JSON.parse(text), error: null };
   } catch (e) {
@@ -1015,17 +882,7 @@ async function handleLicenseCheck(request, env) {
     const { oderId, deviceId } = data || {};
     
     if (!oderId) {
-      return jsonResponse({ valid: false, error: 'oderId is required' }, 400);
-    }
-    
-    // БЕЗОПАСНОСТЬ: Валидация oderId
-    if (!isValidOderId(oderId)) {
-      return jsonResponse({ valid: false, error: 'Invalid oderId format' }, 400);
-    }
-    
-    // БЕЗОПАСНОСТЬ: Валидация deviceId если передан
-    if (deviceId && !isValidOderId(deviceId)) {
-      return jsonResponse({ valid: false, error: 'Invalid deviceId format' }, 400);
+      return jsonResponse({ valid: false, error: 'oderId is required' });
     }
     
     const result = await getLicenseData(env, oderId);
@@ -1108,14 +965,9 @@ async function handleGenerateCode(request, env) {
       return jsonResponse({ error: 'oderId is required' }, 400);
     }
     
-    // БЕЗОПАСНОСТЬ: Строгая валидация oderId
-    if (!isValidOderId(oderId)) {
+    // Валидация oderId
+    if (typeof oderId !== 'string' || oderId.length < 16 || oderId.length > 64) {
       return jsonResponse({ error: 'Invalid oderId format' }, 400);
-    }
-    
-    // БЕЗОПАСНОСТЬ: Валидация deviceId если передан
-    if (deviceId && !isValidOderId(deviceId)) {
-      return jsonResponse({ error: 'Invalid deviceId format' }, 400);
     }
     
     // ВАЖНО: Удаляем старую привязку при генерации нового кода
@@ -1174,9 +1026,9 @@ async function handleGenerateCode(request, env) {
 
 async function handleStatus(request, env) {
   try {
-    // Rate limiting - увеличенный лимит для частых проверок подключения
+    // Rate limiting
     const clientIP = request.headers.get('CF-Connecting-IP') || 'unknown';
-    const rateLimit = await checkRateLimit(env, `status:${clientIP}`, 120); // 120 запросов в минуту
+    const rateLimit = await checkRateLimit(env, `status:${clientIP}`);
     if (!rateLimit.allowed) {
       return jsonResponse({ error: 'RATE_LIMITED' }, 429);
     }
@@ -1190,11 +1042,6 @@ async function handleStatus(request, env) {
     
     if (!oderId) {
       return jsonResponse({ error: 'oderId is required' }, 400);
-    }
-    
-    // ОПТИМИЗАЦИЯ: Валидация oderId сразу
-    if (!isValidOderId(oderId)) {
-      return jsonResponse({ error: 'Invalid oderId format' }, 400);
     }
     
     const result = await getLicenseData(env, oderId);
@@ -1254,35 +1101,31 @@ async function handleTelegramConnect(request, env) {
       return jsonResponse({ error: 'code and telegramId are required' }, 400);
     }
     
-    // БЕЗОПАСНОСТЬ: Валидация кода
-    if (!isValidBindCode(code)) {
+    // Валидация кода (только буквы и цифры, 8 символов)
+    if (!/^[A-Z0-9]{8}$/i.test(code)) {
       return jsonResponse({ error: 'Invalid code format' }, 400);
     }
     
-    // БЕЗОПАСНОСТЬ: Валидация telegramId
-    if (!isValidTelegramId(telegramId)) {
+    // Валидация telegramId (должен быть числом)
+    if (!/^\d+$/.test(String(telegramId))) {
       return jsonResponse({ error: 'Invalid telegramId' }, 400);
     }
     
-    // БЕЗОПАСНОСТЬ: Санитизация username и firstName
-    const safeUsername = username ? sanitizeString(username, 32) : null;
-    const safeFirstName = firstName ? sanitizeString(firstName, 64) : null;
-    
     // Получаем данные по коду
-    const codeData = await env.USERS.get(`code:${code.toUpperCase()}`);
+    const codeData = await env.USERS.get(`code:${code}`);
     if (!codeData) {
       return jsonResponse({ error: 'Code expired or invalid', code: 'INVALID_CODE' }, 400);
     }
     
     const { oderId, deviceId } = JSON.parse(codeData);
     
-    // Сохраняем связку user -> telegram (используем санитизированные данные)
+    // Сохраняем связку user -> telegram
     const userData = {
       oderId,
       deviceId,
-      telegramId: String(telegramId),
-      username: safeUsername,
-      firstName: safeFirstName,
+      telegramId,
+      username: username || null,
+      firstName: firstName || null,
       connectedAt: Date.now()
     };
     
@@ -1292,7 +1135,7 @@ async function handleTelegramConnect(request, env) {
     await env.USERS.put(`tg:${telegramId}`, oderId);
     
     // Удаляем использованный код
-    await env.USERS.delete(`code:${code.toUpperCase()}`);
+    await env.USERS.delete(`code:${code}`);
     
     // Проверяем/выдаём лицензию
     const result = await getLicenseData(env, oderId);
@@ -1637,56 +1480,34 @@ async function requestGroupChatApproval(env, telegramId, chatId, chatTitle, requ
   return { success: true };
 }
 
-// Одобрить групповой чат (админ или автоматически из белого списка)
-async function approveGroupChat(env, chatId, approvedBy, autoApprove = false) {
+// Одобрить групповой чат (только админ)
+async function approveGroupChat(env, chatId, approvedBy) {
   const pendingKey = `pending_group:${chatId}`;
   const pendingData = await env.USERS.get(pendingKey);
   
-  let telegramId;
-  let chatTitle = 'Unknown';
-  
-  if (pendingData) {
-    // Есть запрос на одобрение
-    const request = JSON.parse(pendingData);
-    telegramId = request.requestedBy;
-    chatTitle = request.chatTitle;
-  } else if (autoApprove) {
-    // Автоодобрение из белого списка - владелец = approvedBy
-    telegramId = approvedBy;
-  } else {
+  if (!pendingData) {
     return { success: false, error: 'REQUEST_NOT_FOUND' };
   }
+  
+  const request = JSON.parse(pendingData);
+  const telegramId = request.requestedBy;
   
   // Получаем текущие чаты пользователя
   const groupData = await getUserGroupChats(env, telegramId);
   
-  // Проверяем не добавлен ли уже этот чат
-  const alreadyExists = groupData.chats.some(c => String(c.chatId) === String(chatId));
-  if (alreadyExists) {
-    // Уже добавлен - просто очищаем pending
-    if (pendingData) {
-      await env.USERS.delete(pendingKey);
-    }
-    return { success: true, telegramId, alreadyExists: true };
-  }
-  
   // Добавляем чат
   groupData.chats.push({
-    chatId: String(chatId),
-    chatTitle: chatTitle,
+    chatId: chatId,
+    chatTitle: request.chatTitle,
     approvedAt: Date.now(),
-    approvedBy: approvedBy,
-    autoApproved: autoApprove
+    approvedBy: approvedBy
   });
   
   // Удаляем из pending
-  groupData.pending = (groupData.pending || []).filter(p => String(p.chatId) !== String(chatId));
+  groupData.pending = (groupData.pending || []).filter(p => p.chatId !== chatId);
   
   await saveUserGroupChats(env, telegramId, groupData);
-  
-  if (pendingData) {
-    await env.USERS.delete(pendingKey);
-  }
+  await env.USERS.delete(pendingKey);
   
   // Сохраняем обратную связь чат -> пользователь
   await env.USERS.put(`group_owner:${chatId}`, telegramId);
@@ -2486,28 +2307,23 @@ function getStatusKeyboard(isValid, type) {
 
 async function handleTelegramWebhook(request, env) {
   try {
-    const clientIP = request.headers.get('CF-Connecting-IP');
-    
-    // БЕЗОПАСНОСТЬ: Проверка IP от Telegram (ВКЛЮЧЕНА по умолчанию)
-    // Отключить можно через env.SKIP_TELEGRAM_IP_CHECK = 'true' (не рекомендуется)
-    if (env.SKIP_TELEGRAM_IP_CHECK !== 'true') {
+    // Проверка IP от Telegram (опционально, если env.VERIFY_TELEGRAM_IP === 'true')
+    if (env.VERIFY_TELEGRAM_IP === 'true') {
+      const clientIP = request.headers.get('CF-Connecting-IP');
       if (!isFromTelegram(clientIP)) {
-        console.warn(`[SECURITY] Webhook blocked from non-Telegram IP: ${clientIP}`);
+        console.warn(`Webhook from non-Telegram IP: ${clientIP}`);
         return jsonResponse({ ok: false, error: 'Forbidden' }, 403);
       }
     }
     
-    // БЕЗОПАСНОСТЬ: Проверка секретного токена от Telegram (ОБЯЗАТЕЛЬНО если настроен)
+    // Проверка секретного токена от Telegram (если настроен)
     const secretToken = env.TELEGRAM_WEBHOOK_SECRET;
     if (secretToken) {
       const headerToken = request.headers.get('X-Telegram-Bot-Api-Secret-Token');
-      if (!headerToken || headerToken !== secretToken) {
-        console.warn(`[SECURITY] Invalid webhook secret from IP: ${clientIP}`);
+      if (headerToken !== secretToken) {
+        console.warn('Invalid webhook secret token');
         return jsonResponse({ ok: false, error: 'Forbidden' }, 403);
       }
-    } else {
-      // Логируем предупреждение если secret не настроен
-      console.warn('[SECURITY WARNING] TELEGRAM_WEBHOOK_SECRET not configured!');
     }
     
     const { data: update, error } = await safeParseJson(request);
@@ -2527,18 +2343,6 @@ async function handleTelegramWebhook(request, env) {
     const isGroupChat = (chat) => {
       return chat && (chat.type === 'group' || chat.type === 'supergroup');
     };
-    
-    // ========== ПРОВЕРКА СТАТУСА БОТА ==========
-    // Админские команды работают всегда, остальные - только если бот включён
-    const botEnabled = await isBotEnabled(env);
-    const fromUserId = update.message?.from?.id || update.callback_query?.from?.id;
-    const isAdminUser = fromUserId ? await isAdmin(String(fromUserId)) : false;
-    
-    // Если бот выключен и это не админ - игнорируем
-    if (!botEnabled && !isAdminUser) {
-      console.log('[BOT DISABLED] Ignoring non-admin message');
-      return jsonResponse({ ok: true });
-    }
     
     // === ОБРАБОТКА INLINE ЗАПРОСОВ ===
     if (update.inline_query) {
@@ -2998,7 +2802,7 @@ _Для покупки напишите в поддержку_ 👇`;
 💰 *Цены:*
 • Уровень 1: 15 USDT/мес
 • Уровень 2: 30 USDT/мес
-• Уровень 3: 35 USDT/мес`;
+• Уровень 3: 35 USDT/мес`;`
           
           await editTelegramMessage(env, chatId, messageId, compareMsg, {
             reply_markup: {
@@ -3016,22 +2820,24 @@ _Для покупки напишите в поддержку_ 👇`;
           // Очистить все устройства пользователя
           await clearAllDevices(env, telegramId);
           
-          const clearMsg = '✅ *Устройства отвязаны*\n\nВсе устройства были удалены из вашего аккаунта.\n\nПри следующем использовании расширения устройство будет добавлено автоматически.';
-          
-          await editTelegramMessage(env, chatId, messageId, clearMsg, {
-            reply_markup: {
+          await editTelegramMessage(env, chatId, messageId,
+            `✅ *Устройства отвязаны*\n\n` +
+            `Все устройства были удалены из вашего аккаунта.\n\n` +
+            `При следующем использовании расширения\n` +
+            `устройство будет добавлено автоматически.`,
+            { reply_markup: {
               inline_keyboard: [
                 [{ text: '📱 Мои устройства', callback_data: 'my_devices' }],
                 [{ text: '← Меню', callback_data: 'menu' }]
               ]
-            }
-          });
+            }}
+          );
           break;
         }
         
         case 'my_devices': {
           // Показать устройства (callback версия команды /devices)
-          const licenseData = await env.USERS.get('license:tg:' + telegramId);
+          const licenseData = await env.USERS.get(`license:tg:${telegramId}`);
           const license = licenseData ? JSON.parse(licenseData) : null;
           const licenseType = LICENSE_TYPES[license?.type] || LICENSE_TYPES.trial;
           const maxDevices = licenseType.maxDevices || 1;
@@ -3039,17 +2845,17 @@ _Для покупки напишите в поддержку_ 👇`;
           const devicesData = await getUserDevices(env, telegramId);
           const devices = devicesData.devices || [];
           
-          let message = '📱 *Ваши устройства*\n\n';
-          message += '📦 Подписка: *' + licenseType.name + '*\n';
-          message += '🔢 Использовано: ' + devices.length + '/' + maxDevices + '\n\n';
+          let message = `📱 *Ваши устройства*\n\n`;
+          message += `📦 Подписка: *${licenseType.name}*\n`;
+          message += `🔢 Использовано: ${devices.length}/${maxDevices}\n\n`;
           
           if (devices.length === 0) {
-            message += '_Нет подключённых устройств_';
+            message += `_Нет подключённых устройств_`;
           } else {
-            message += '*Список:*\n';
+            message += `*Список:*\n`;
             devices.forEach((d, i) => {
               const lastSeenDate = new Date(d.lastSeen).toLocaleDateString('ru-RU');
-              message += (i + 1) + '. ' + d.deviceId.substring(0, 12) + '... (' + lastSeenDate + ')\n';
+              message += `${i + 1}. \`${d.deviceId.substring(0, 12)}...\` (${lastSeenDate})\n`;
             });
           }
           
@@ -3067,7 +2873,19 @@ _Для покупки напишите в поддержку_ 👇`;
         
         case 'support': {
           // Обработчик кнопки поддержки
-          const supportMsg = '💬 *Поддержка*\n\nЕсли у вас есть вопросы или проблемы:\n\n📩 Напишите: @YaMob\n⏰ Время ответа: до 24 часов\n\n*Частые вопросы:*\n• Как подключить расширение?\n• Как продлить подписку?\n• Не работает автокликер?\n\nНажмите кнопку ниже 👇';
+          const supportMsg = `💬 *Поддержка*
+
+Если у вас есть вопросы или проблемы:
+
+📩 Напишите: @YaMob
+⏰ Время ответа: до 24 часов
+
+*Частые вопросы:*
+• Как подключить расширение?
+• Как продлить подписку?
+• Не работает автокликер?
+
+Нажмите кнопку ниже 👇`;
           
           await editTelegramMessage(env, chatId, messageId, supportMsg, {
             reply_markup: {
@@ -3084,7 +2902,7 @@ _Для покупки напишите в поддержку_ 👇`;
         case 'mystats': {
           // Личная статистика пользователя (аналог команды /mystats)
           const stats = await getUserStats(env, telegramId);
-          const oderId = await env.USERS.get('tg:' + telegramId);
+          const oderId = await env.USERS.get(`tg:${telegramId}`);
           
           let licenseInfo = '❌ Не подключён';
           let licenseType = null;
@@ -3095,8 +2913,8 @@ _Для покупки напишите в поддержку_ 👇`;
               const isActive = result.license.expiresAt > Date.now();
               const typeText = LICENSE_TYPES[result.license.type]?.name || result.license.type;
               licenseInfo = isActive 
-                ? '✅ ' + typeText + ' (' + daysLeft + ' ' + getDaysWord(daysLeft) + ')'
-                : '❌ ' + typeText + ' (истекла)';
+                ? `✅ ${typeText} (${daysLeft} ${getDaysWord(daysLeft)})`
+                : `❌ ${typeText} (истекла)`;
               licenseType = result.license.type;
             }
           }
@@ -3118,15 +2936,15 @@ _Для покупки напишите в поддержку_ 👇`;
           const paidBonuses = stats.referralPaidBonus || 0;
           const pendingBonuses = stats.referralPendingBonus || 0;
           
-          const message = '📈 *Ваша статистика*\n\n' +
-            achievementBadge + '👆 *Сегодня:* ' + todayClicks + ' кликов\n' +
-            '📊 *Всего:* ' + totalClicks + ' кликов\n\n' +
-            '💎 *Подписка:* ' + licenseInfo + '\n\n' +
-            '👥 *Рефералов:* ' + referralCount + '\n' +
-            '🎁 *Получено бонусов:* ' + paidBonuses + ' дн.\n' +
-            (pendingBonuses > 0 ? '⏳ *Ожидают оплаты:* ' + pendingBonuses + '\n' : '') +
-            '\n🎟️ *Ваш код:* ' + referralCode + '\n\n' +
-            '_Бонус +1 день когда реферал оформит подписку!_';
+          const message = `📈 *Ваша статистика*\n\n` +
+            `${achievementBadge}👆 *Сегодня:* ${todayClicks} кликов\n` +
+            `📊 *Всего:* ${totalClicks} кликов\n\n` +
+            `💎 *Подписка:* ${licenseInfo}\n\n` +
+            `👥 *Рефералов:* ${referralCount}\n` +
+            `🎁 *Получено бонусов:* ${paidBonuses} дн.\n` +
+            (pendingBonuses > 0 ? `⏳ *Ожидают оплаты:* ${pendingBonuses}\n` : '') +
+            `\n🎟️ *Ваш код:* \`${referralCode}\`\n\n` +
+            `_Бонус +1 день когда реферал оформит подписку!_`;
           
           await editTelegramMessage(env, chatId, messageId, message, {
             reply_markup: {
@@ -4533,11 +4351,9 @@ _Для покупки напишите в поддержку_ 👇`;
     
     // ========== СЕКРЕТНАЯ АДМИН-ПАНЕЛЬ ==========
     // Вход по секретной фразе (скрытая от обычных пользователей)
-    // ОБЯЗАТЕЛЬНО настройте через: wrangler secret put ADMIN_SECRET_PHRASE
-    const adminSecretPhrase = env.ADMIN_SECRET_PHRASE;
-    
-    // Секретная фраза ДОЛЖНА быть настроена, иначе админка отключена
-    if (adminSecretPhrase && update.message?.text === adminSecretPhrase) {
+    // Приоритет: env.ADMIN_SECRET_PHRASE, иначе fallback значение
+    const adminSecretPhrase = env.ADMIN_SECRET_PHRASE || 'flamingo1000';
+    if (update.message?.text === adminSecretPhrase) {
       const chatId = update.message.chat.id;
       const telegramId = String(update.message.from.id);
       
@@ -5224,169 +5040,6 @@ _Для покупки напишите в поддержку_ 👇`;
       return jsonResponse({ ok: true });
     }
     
-    // ========== КОМАНДЫ УПРАВЛЕНИЯ БОТОМ (АДМИН) ==========
-    
-    // Команда /bot_off - выключить бота
-    if (update.message?.text === '/bot_off' || update.message?.text === '/stop_bot') {
-      const chatId = update.message.chat.id;
-      const telegramId = String(update.message.from.id);
-      
-      if (!await isAdmin(telegramId)) {
-        await sendTelegramMessage(env, chatId, '❌ Нет доступа');
-        return jsonResponse({ ok: true });
-      }
-      
-      await setBotEnabled(env, false);
-      await sendTelegramMessage(env, chatId, 
-        `🔴 *Бот выключен*\n\n` +
-        `Бот перестанет отвечать на сообщения пользователей.\n` +
-        `Админские команды продолжат работать.\n\n` +
-        `Для включения: /bot_on`
-      );
-      return jsonResponse({ ok: true });
-    }
-    
-    // Команда /bot_on - включить бота
-    if (update.message?.text === '/bot_on' || update.message?.text === '/start_bot') {
-      const chatId = update.message.chat.id;
-      const telegramId = String(update.message.from.id);
-      
-      if (!await isAdmin(telegramId)) {
-        await sendTelegramMessage(env, chatId, '❌ Нет доступа');
-        return jsonResponse({ ok: true });
-      }
-      
-      await setBotEnabled(env, true);
-      await sendTelegramMessage(env, chatId, 
-        `🟢 *Бот включён*\n\n` +
-        `Бот снова отвечает на сообщения пользователей.`
-      );
-      return jsonResponse({ ok: true });
-    }
-    
-    // Команда /bot_status - статус бота
-    if (update.message?.text === '/bot_status') {
-      const chatId = update.message.chat.id;
-      const telegramId = String(update.message.from.id);
-      
-      if (!await isAdmin(telegramId)) {
-        await sendTelegramMessage(env, chatId, '❌ Нет доступа');
-        return jsonResponse({ ok: true });
-      }
-      
-      const enabled = await isBotEnabled(env);
-      await sendTelegramMessage(env, chatId, 
-        `📊 *Статус бота*\n\n` +
-        `Состояние: ${enabled ? '🟢 Включён' : '🔴 Выключен'}\n` +
-        `Версия: ${BOT_VERSION}\n` +
-        `Uptime: ${Math.floor((Date.now() - metrics.startTime) / 1000 / 60)} мин`
-      );
-      return jsonResponse({ ok: true });
-    }
-    
-    // Команда /whitelist_add - добавить чат в белый список
-    if (update.message?.text?.startsWith('/whitelist_add') || update.message?.text?.startsWith('/wl_add')) {
-      const chatId = update.message.chat.id;
-      const telegramId = String(update.message.from.id);
-      
-      if (!await isAdmin(telegramId)) {
-        await sendTelegramMessage(env, chatId, '❌ Нет доступа');
-        return jsonResponse({ ok: true });
-      }
-      
-      const parts = update.message.text.split(' ');
-      if (parts.length < 3) {
-        await sendTelegramMessage(env, chatId, 
-          `❌ Формат: \`/whitelist_add chatId ownerTelegramId [заметка]\`\n\n` +
-          `Пример: \`/whitelist_add -1001234567890 123456789 Чат оператора\``
-        );
-        return jsonResponse({ ok: true });
-      }
-      
-      const targetChatId = parts[1];
-      const ownerTgId = parts[2];
-      const note = parts.slice(3).join(' ') || '';
-      
-      const data = await addChatToWhitelist(env, targetChatId, ownerTgId, note);
-      await saveWhitelistIndex(env);
-      
-      await sendTelegramMessage(env, chatId, 
-        `✅ *Чат добавлен в белый список*\n\n` +
-        `🆔 Chat ID: \`${targetChatId}\`\n` +
-        `👤 Владелец: \`${ownerTgId}\`\n` +
-        `📝 Заметка: ${note || '—'}\n\n` +
-        `Теперь этот чат будет одобрен автоматически.`
-      );
-      return jsonResponse({ ok: true });
-    }
-    
-    // Команда /whitelist_remove - удалить чат из белого списка
-    if (update.message?.text?.startsWith('/whitelist_remove') || update.message?.text?.startsWith('/wl_remove')) {
-      const chatId = update.message.chat.id;
-      const telegramId = String(update.message.from.id);
-      
-      if (!await isAdmin(telegramId)) {
-        await sendTelegramMessage(env, chatId, '❌ Нет доступа');
-        return jsonResponse({ ok: true });
-      }
-      
-      const parts = update.message.text.split(' ');
-      if (parts.length < 2) {
-        await sendTelegramMessage(env, chatId, 
-          `❌ Формат: \`/whitelist_remove chatId\``
-        );
-        return jsonResponse({ ok: true });
-      }
-      
-      const targetChatId = parts[1];
-      await removeChatFromWhitelist(env, targetChatId);
-      await saveWhitelistIndex(env);
-      
-      await sendTelegramMessage(env, chatId, 
-        `✅ Чат \`${targetChatId}\` удалён из белого списка.`
-      );
-      return jsonResponse({ ok: true });
-    }
-    
-    // Команда /whitelist - показать белый список
-    if (update.message?.text === '/whitelist' || update.message?.text === '/wl') {
-      const chatId = update.message.chat.id;
-      const telegramId = String(update.message.from.id);
-      
-      if (!await isAdmin(telegramId)) {
-        await sendTelegramMessage(env, chatId, '❌ Нет доступа');
-        return jsonResponse({ ok: true });
-      }
-      
-      // Загружаем кэш если пуст
-      if (WHITELISTED_CHATS.size === 0) {
-        await loadWhitelistCache(env);
-      }
-      
-      const chats = Array.from(WHITELISTED_CHATS.values());
-      
-      if (chats.length === 0) {
-        await sendTelegramMessage(env, chatId, 
-          `📋 *Белый список чатов*\n\n_Пусто_\n\n` +
-          `Добавить: \`/whitelist_add chatId ownerTgId [заметка]\``
-        );
-        return jsonResponse({ ok: true });
-      }
-      
-      let message = `📋 *Белый список чатов* (${chats.length})\n\n`;
-      chats.forEach((c, i) => {
-        const date = new Date(c.addedAt).toLocaleDateString('ru-RU');
-        message += `${i+1}. \`${c.chatId}\`\n`;
-        message += `   👤 Владелец: \`${c.owner}\`\n`;
-        message += `   📅 Добавлен: ${date}\n`;
-        if (c.note) message += `   📝 ${c.note}\n`;
-        message += `\n`;
-      });
-      
-      await sendTelegramMessage(env, chatId, message);
-      return jsonResponse({ ok: true });
-    }
-    
     // ========== КОМАНДЫ ГРУППОВЫХ ЧАТОВ ==========
     
     // Команда /approve_group - одобрить групповой чат (админ)
@@ -5652,64 +5305,14 @@ _Для покупки напишите в поддержку_ 👇`;
     if (update.my_chat_member) {
       const member = update.my_chat_member;
       const chat = member.chat;
-      const newChatMember = member.new_chat_member;
+      const newStatus = member.new_chat_member.status;
       const fromUser = member.from;
-      
-      // Проверяем наличие необходимых данных
-      if (!newChatMember || !chat || !fromUser) {
-        return jsonResponse({ ok: true });
-      }
-      
-      const newStatus = newChatMember.status;
       
       // Бот добавлен в группу
       if (chat.type === 'group' || chat.type === 'supergroup') {
         if (newStatus === 'member' || newStatus === 'administrator') {
           const telegramId = String(fromUser.id);
           const username = fromUser.username;
-          
-          // ОПТИМИЗАЦИЯ: Проверяем белый список - если чат там, одобряем сразу
-          const whitelistData = await isChatWhitelisted(env, chat.id);
-          if (whitelistData) {
-            // Чат в белом списке - одобряем автоматически
-            const ownerTgId = whitelistData.owner || telegramId;
-            
-            // Проверяем право на групповые чаты у владельца
-            const canUse = await canUseGroupChats(env, ownerTgId);
-            if (!canUse.allowed) {
-              // Если владелец из белого списка потерял лицензию - используем того кто добавил
-              const canUseAdder = await canUseGroupChats(env, telegramId);
-              if (!canUseAdder.allowed) {
-                await sendTelegramMessage(env, chat.id, 
-                  `❌ *Ошибка лицензии*\n\n` +
-                  `У владельца из белого списка нет активной подписки.\n` +
-                  `Обратитесь к администратору.`
-                );
-                return jsonResponse({ ok: true });
-              }
-            }
-            
-            // Автоматическое одобрение
-            const result = await approveGroupChat(env, chat.id, ownerTgId, true);
-            
-            await sendTelegramMessage(env, chat.id, 
-              `🤖 *Exotic Assistant подключён!*\n\n` +
-              `✅ Чат одобрен автоматически (белый список)\n` +
-              `Теперь уведомления о заявках будут приходить сюда.`
-            );
-            
-            // Логируем
-            await logToChat(env,
-              `✅ *Автоодобрение из белого списка*\n\n` +
-              `💬 Чат: ${escapeMarkdown(chat.title)}\n` +
-              `🆔 Chat ID: \`${chat.id}\`\n` +
-              `👤 Добавил: @${username || telegramId}`,
-              'connect',
-              { telegramId, chatId: chat.id, action: 'whitelist_auto_approve' }
-            );
-            
-            return jsonResponse({ ok: true });
-          }
           
           // Проверяем право на групповые чаты
           const canUse = await canUseGroupChats(env, telegramId);
@@ -6649,13 +6252,27 @@ export default {
         return await handleLicenseInfo(request, env);
       }
       
-      // Health check (минимальная информация для безопасности)
+      // Health check с метриками
       if (path === '/api/health') {
-        // Публичный endpoint - только базовый статус, без деталей системы
+        const uptime = Date.now() - metrics.startTime;
+        const uptimeHours = Math.floor(uptime / MS_PER_HOUR);
+        const uptimeMinutes = Math.floor((uptime % MS_PER_HOUR) / MS_PER_MINUTE);
+        
         return jsonResponse({ 
           status: 'ok', 
           version: BOT_VERSION,
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          bot: env.BOT_USERNAME || 'clickuved_bot',
+          hasToken: !!env.TELEGRAM_BOT_TOKEN,
+          hasKV: !!env.USERS,
+          hasLogChat: !!env.LOG_CHAT_ID,
+          uptime: `${uptimeHours}h ${uptimeMinutes}m`,
+          metrics: {
+            requests: metrics.requests,
+            errorRate: metrics.requests.total > 0 
+              ? ((metrics.requests.error / metrics.requests.total) * 100).toFixed(2) + '%' 
+              : '0%'
+          }
         });
       }
       
@@ -6685,16 +6302,8 @@ export default {
         });
       }
       
-      // Webhook info для отладки (ТОЛЬКО с авторизацией)
+      // Webhook info для отладки
       if (path === '/api/webhook-info') {
-        // Требуем авторизацию для доступа к информации о webhook
-        const authHeader = request.headers.get('Authorization');
-        const adminToken = env.ADMIN_TOKEN;
-        
-        if (!adminToken || authHeader !== `Bearer ${adminToken}`) {
-          return jsonResponse({ error: 'Unauthorized' }, 401);
-        }
-        
         const botToken = env.TELEGRAM_BOT_TOKEN;
         if (!botToken) {
           return jsonResponse({ error: 'TELEGRAM_BOT_TOKEN not set' }, 500);
@@ -6708,58 +6317,34 @@ export default {
         }
       }
       
-      // Установка webhook (ТОЛЬКО с авторизацией)
+      // Установка webhook
       if (path === '/api/set-webhook') {
-        // БЕЗОПАСНОСТЬ: Требуем авторизацию
-        const authHeader = request.headers.get('Authorization');
-        const adminToken = env.ADMIN_TOKEN;
-        
-        if (!adminToken || authHeader !== `Bearer ${adminToken}`) {
-          return jsonResponse({ error: 'Unauthorized' }, 401);
-        }
-        
         const botToken = env.TELEGRAM_BOT_TOKEN;
         if (!botToken) {
           return jsonResponse({ error: 'TELEGRAM_BOT_TOKEN not set' }, 500);
         }
         const workerUrl = new URL(request.url).origin;
         const webhookUrl = `${workerUrl}/webhook`;
-        
-        // Добавляем secret_token если настроен
-        let apiUrl = `https://api.telegram.org/bot${botToken}/setWebhook?url=${webhookUrl}`;
-        if (env.TELEGRAM_WEBHOOK_SECRET) {
-          apiUrl += `&secret_token=${env.TELEGRAM_WEBHOOK_SECRET}`;
-        }
-        
         try {
-          const response = await fetch(apiUrl);
+          const response = await fetch(`https://api.telegram.org/bot${botToken}/setWebhook?url=${webhookUrl}`);
           const data = await response.json();
           
           // Логируем установку webhook
           await logToChat(env, 
             `🔧 Webhook установлен\n\n` +
             `📡 URL: \`${webhookUrl}\`\n` +
-            `🔐 Secret: ${env.TELEGRAM_WEBHOOK_SECRET ? 'Установлен' : 'НЕ УСТАНОВЛЕН!'}\n` +
             `✅ Результат: ${data.ok ? 'Успешно' : 'Ошибка'}`,
             'system'
           );
           
-          return jsonResponse({ ...data, webhookUrl, secretConfigured: !!env.TELEGRAM_WEBHOOK_SECRET });
+          return jsonResponse({ ...data, webhookUrl });
         } catch (e) {
           return jsonResponse({ error: e.message }, 500);
         }
       }
       
-      // Тестовый лог (ТОЛЬКО с авторизацией - предотвращает спам)
+      // Тестовый лог - для проверки работы логирования
       if (path === '/api/test-log') {
-        // БЕЗОПАСНОСТЬ: Требуем авторизацию для предотвращения спама
-        const authHeader = request.headers.get('Authorization');
-        const adminToken = env.ADMIN_TOKEN;
-        
-        if (!adminToken || authHeader !== `Bearer ${adminToken}`) {
-          return jsonResponse({ error: 'Unauthorized' }, 401);
-        }
-        
         await logToChat(env, 
           `🧪 *Тестовое сообщение*\n\n` +
           `Если вы видите это сообщение, логирование работает корректно!`,

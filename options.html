@@ -3,601 +3,179 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Настройки - Exotic Operator Assistant</title>
+    <title>Настройки — Exotic Assistant</title>
     <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+            min-width: auto;
+            width: auto;
+            max-width: 100%;
+        }
+    </style>
 </head>
 <body>
     <div class="options-container">
-        
-        <div class="options-header">
+        <!-- Header -->
+        <header class="options-header">
             <h1 class="options-title">Настройки</h1>
-            <p class="options-subtitle">Exotic Operator Assistant v4.0</p>
-        </div>
+            <p class="options-subtitle">Exotic Assistant v5.0</p>
+        </header>
 
-        
-        <div class="tabs">
-            <button class="tab-btn active" data-tab="general">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" class="tab-icon">
-                    <path d="M8 0C6.14 0 4.59 1.55 4.59 3.41v.86c-1.72.38-3 1.95-3 3.82v4.5c0 2.18 1.77 3.95 3.95 3.95h4.91c2.18 0 3.95-1.77 3.95-3.95v-4.5c0-1.87-1.28-3.44-3-3.82v-.86C11.41 1.55 9.86 0 8 0zm0 1.5c1.05 0 1.91.86 1.91 1.91v.68H6.09v-.68C6.09 2.36 6.95 1.5 8 1.5z"/>
-                </svg>
-                Основные
-            </button>
-            <button class="tab-btn" data-tab="stats">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" class="tab-icon">
-                    <path d="M2 11h4v4H2v-4zm6-7h4v11H8V4zm6-4h4v15h-4V0z"/>
-                </svg>
-                Статистика
-            </button>
-            <button class="tab-btn" data-tab="notificationsTab">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" class="tab-icon">
-                    <path d="M8 16a2 2 0 0 0 1.985-1.75c.017-.137-.097-.25-.235-.25h-3.5c-.138 0-.252.113-.235.25A2 2 0 0 0 8 16zm7-5a1 1 0 0 0-1-1v-1a6 6 0 1 0-12 0v1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1z"/>
-                </svg>
-                Уведомления
-            </button>
-            <button class="tab-btn" data-tab="about">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" class="tab-icon">
-                    <path d="M8 16A8 8 0 1 1 8 0a8 8 0 0 1 0 16zm.93-9.412-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533L8.93 6.588zM8 5.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/>
-                </svg>
-                О программе
-            </button>
-        </div>
-
-        
-        <div class="tab-content active" id="general">
-            
-            <div class="settings-section">
-                <h2 class="section-title">
-                    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M11.251.068a.5.5 0 0 1 .227.58L9.677 6.5H13a.5.5 0 0 1 .364.843l-8 8.5a.5.5 0 0 1-.842-.49L6.323 9.5H3a.5.5 0 0 1-.364-.843l8-8.5a.5.5 0 0 1 .615-.09z"/>
-                    </svg>
-                    Настройки кликера
-                </h2>
-
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <div class="setting-title">Автоматический клик <span title="Включите, чтобы кликер автоматически нажимал нужные кнопки на странице"><svg width='16' height='16' style='vertical-align:middle;opacity:0.7;'><circle cx='8' cy='8' r='7' fill='#eee' stroke='#888' stroke-width='1'/><text x='8' y='12' text-anchor='middle' font-size='10' fill='#888'>?</text></svg></span></div>
-                        <div class="setting-desc">Включить автоматическое нажатие кнопок на целевой странице</div>
-                    </div>
-                    <label class="switch" title="Включить/выключить автокликер">
-                        <input type="checkbox" id="enabled" aria-label="Автоматический клик">
-                        <span class="switch-slider"></span>
-                    </label>
-                </div>
-
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <div class="setting-title">Интервал между кликами <span title="Через сколько секунд будет происходить следующий клик после предыдущего"><svg width='16' height='16' style='vertical-align:middle;opacity:0.7;'><circle cx='8' cy='8' r='7' fill='#eee' stroke='#888' stroke-width='1'/><text x='8' y='12' text-anchor='middle' font-size='10' fill='#888'>?</text></svg></span></div>
-                        <div class="setting-desc">Задержка между автоматическими нажатиями: <strong id="intervalValue">2.0</strong> сек</div>
-                    </div>
-                    <input type="range" id="clickInterval" min="0.1" max="10" value="2" step="0.1" class="range-200" aria-label="Интервал между кликами (сек)" title="Интервал между кликами в секундах">
-                </div>
-
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <div class="setting-title">Случайная задержка <span title="Добавляет случайную задержку к каждому клику для имитации человека"><svg width='16' height='16' style='vertical-align:middle;opacity:0.7;'><circle cx='8' cy='8' r='7' fill='#eee' stroke='#888' stroke-width='1'/><text x='8' y='12' text-anchor='middle' font-size='10' fill='#888'>?</text></svg></span></div>
-                        <div class="setting-desc">Добавить случайный диапазон ±<strong id="randomValue">0.5</strong> сек для естественности</div>
-                    </div>
-                    <input type="range" id="randomDelay" min="0" max="2" value="0.5" step="0.1" class="range-200" aria-label="Случайная задержка (сек)" title="Случайная задержка в секундах">
-                </div>
-
-                <div class="setting-row" style="display:none">
-                    <div class="setting-info" style="display:none">
-                        <div class="setting-title">CSS селектор кнопки</div>
-                        <div class="setting-desc">Указать селектор для целевых кнопок на странице</div>
-                    </div>
-                    <textarea id="buttonSelector" rows="2" class="full-width" placeholder='button.workButton, .take-work-btn' aria-label="CSS селектор кнопки" style="display:none">button[class*="workButton"]</textarea>
-                </div>
-            </div>
-
-            
-            <div class="settings-section">
-                <h2 class="section-title">
-                    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zM1.5 8a6.5 6.5 0 1 1 13 0 6.5 6.5 0 0 1-13 0z"/>
-                        <path d="M8 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/>
-                        <circle cx="8" cy="8" r="2"/>
-                    </svg>
-                    Целевая страница
-                </h2>
-
-                <div class="setting-row" style="display:none">
-                    <div class="setting-info" style="display:none">
-                        <div class="setting-title">URL страницы</div>
-                        <div class="setting-desc">URL страницы для автоматического клика (supports wildcards *)</div>
-                    </div>
-                    <textarea id="targetUrl" rows="2" class="full-width" placeholder="https://exotic.company/operator/payout_transaction" aria-label="URL целевой страницы" style="display:none">https://exotic.company/operator/payout_transaction</textarea>
-                </div>
-
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <div class="setting-title">Автоматический запуск <span title="Кликер будет запускаться сам при открытии целевой страницы"><svg width='16' height='16' style='vertical-align:middle;opacity:0.7;'><circle cx='8' cy='8' r='7' fill='#eee' stroke='#888' stroke-width='1'/><text x='8' y='12' text-anchor='middle' font-size='10' fill='#888'>?</text></svg></span></div>
-                        <div class="setting-desc">Начинать кликер автоматически при загрузке целевой страницы</div>
-                    </div>
-                    <label class="switch">
-                        <input type="checkbox" id="autoStart" aria-label="Автоматический запуск" title="Включить автозапуск кликера">
-                        <span class="switch-slider"></span>
-                    </label>
-                </div>
-            </div>
-
-            
-            <div class="settings-section">
-                <h2 class="section-title">
-                    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0zM4.5 7.5a.5.5 0 0 0 0 1h5.793l-2.147 2.146a.5.5 0 0 0 .708.708l3-3a.5.5 0 0 0 0-.708l-3-3a.5.5 0 1 0-.708.708L10.293 7.5H4.5z"/>
-                    </svg>
-                    Производительность
-                </h2>
-
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <div class="setting-title">Сканирование страницы <span title="Периодичность проверки страницы на наличие новых кнопок для клика"><svg width='16' height='16' style='vertical-align:middle;opacity:0.7;'><circle cx='8' cy='8' r='7' fill='#eee' stroke='#888' stroke-width='1'/><text x='8' y='12' text-anchor='middle' font-size='10' fill='#888'>?</text></svg></span></div>
-                        <div class="setting-desc">Как часто проверять страницу на наличие кнопок: <strong id="scanValue">1000</strong> мс</div>
-                    </div>
-                    <input type="range" id="scanInterval" min="100" max="5000" value="1000" step="100" class="range-200" aria-label="Интервал сканирования" title="Интервал сканирования страницы (мс)">
-                </div>
-
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <div class="setting-title">Лимит кликов в день <span title="Ограничение на количество кликов за сутки. 0 — без лимита."><svg width='16' height='16' style='vertical-align:middle;opacity:0.7;'><circle cx='8' cy='8' r='7' fill='#eee' stroke='#888' stroke-width='1'/><text x='8' y='12' text-anchor='middle' font-size='10' fill='#888'>?</text></svg></span></div>
-                        <div class="setting-desc">Максимальное количество кликов за 24 часа (0 = без лимита)</div>
-                    </div>
-                    <input type="number" id="dailyLimit" min="0" max="10000" value="0" class="input-120" aria-label="Лимит кликов в день" title="Введите максимальное количество кликов в сутки">
-                </div>
-            </div>
-        </div>
-
-        
-        <div class="tab-content" id="stats">
-            
-            <div class="stats-hero">
-                <div class="stats-hero-main">
-                    <div class="stats-hero-icon">🏆</div>
-                    <div class="stats-hero-value" id="statsTotal">0</div>
-                    <div class="stats-hero-label">Всего кликов</div>
-                </div>
-                <div class="stats-hero-badges">
-                    <div class="stats-badge stats-badge-today">
-                        <span class="badge-value" id="statsToday">0</span>
-                        <span class="badge-label">сегодня</span>
-                    </div>
-                    <div class="stats-badge stats-badge-session">
-                        <span class="badge-value" id="statsSession">0</span>
-                        <span class="badge-label">сессия</span>
-                    </div>
-                    <div class="stats-badge stats-badge-accuracy">
-                        <span class="badge-value" id="statsAccuracy">100%</span>
-                        <span class="badge-label">точность</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="settings-section">
-                <div class="section-header">
-                    <h2 class="section-title">
-                        <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
-                            <path d="M4 11H2v3h2v-3zm5-4H7v7h2V7zm5-5h-2v12h2V2zm-2-1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1h-2zM6 7a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V7zm-5 4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1v-3z"/>
+        <!-- Telegram Section -->
+        <section class="options-section">
+            <h2 class="options-section-title">Telegram</h2>
+            <div class="options-group">
+                <div class="telegram-section" id="telegramNotConnected">
+                    <div class="telegram-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="white">
+                            <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.161c-.18 1.897-.962 6.502-1.359 8.627-.168.9-.5 1.201-.82 1.23-.697.064-1.226-.461-1.901-.903-1.056-.692-1.653-1.123-2.678-1.799-1.185-.781-.417-1.21.258-1.911.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.139-5.062 3.345-.479.329-.913.489-1.302.481-.428-.009-1.252-.242-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.831-2.529 6.998-3.015 3.333-1.386 4.025-1.627 4.477-1.635.099-.002.321.023.465.141.12.098.153.228.166.331.013.103.03.336.017.519z"/>
                         </svg>
-                        График активности
-                    </h2>
-                    <select id="chartPeriod" class="select-compact" title="Период графика" aria-label="Период графика">
-                        <option value="7">7 дней</option>
-                        <option value="14">14 дней</option>
-                        <option value="30" selected>30 дней</option>
-                    </select>
-                </div>
-                <div class="chart-container">
-                    <canvas id="activityChart"></canvas>
-                </div>
-            </div>
-
-            <div class="settings-section">
-                <h2 class="section-title">
-                    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z"/>
-                        <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z"/>
-                    </svg>
-                    Активность по часам
-                </h2>
-                <div class="hourly-chart" id="hourlyChart"></div>
-                <div class="hourly-legend">
-                    <span>00:00</span>
-                    <span>06:00</span>
-                    <span>12:00</span>
-                    <span>18:00</span>
-                    <span>23:00</span>
-                </div>
-            </div>
-
-            <div class="settings-section">
-                <h2 class="section-title">
-                    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4H1z"/>
-                    </svg>
-                    Календарь кликов
-                </h2>
-                <div class="calendar-header">
-                    <div class="calendar-weekdays">
-                        <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
                     </div>
-                </div>
-                <div class="calendar-grid" id="calendarGrid"></div>
-                <div class="calendar-legend">
-                    <span class="legend-item"><span class="legend-color legend-level-1"></span>Меньше</span>
-                    <span class="legend-item"><span class="legend-color legend-level-2"></span></span>
-                    <span class="legend-item"><span class="legend-color legend-level-3"></span></span>
-                    <span class="legend-item"><span class="legend-color legend-level-4"></span>Больше</span>
-                </div>
-            </div>
-
-            <div class="settings-section">
-                <h2 class="section-title">
-                    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M1 11a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1v-3zm5-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V7zm5-5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1V2z"/>
-                    </svg>
-                    Статистика по периодам
-                </h2>
-                <div class="period-cards">
-                    <div class="period-card">
-                        <div class="period-header">
-                            <span class="period-icon">📅</span>
-                            <span class="period-name">7 дней</span>
-                        </div>
-                        <div class="period-value" id="stats7Days">0</div>
-                        <div class="period-avg">~<span id="avg7">0</span>/день</div>
+                    <h3 class="telegram-title">Подключите Telegram</h3>
+                    <p class="telegram-desc">Получите 24 часа бесплатного доступа</p>
+                    
+                    <div class="code-container">
+                        <div class="telegram-code" id="connectCode" title="Нажмите чтобы скопировать">--------</div>
+                        <span class="copy-hint" id="copyHint">📋 Скопировано!</span>
                     </div>
-                    <div class="period-card">
-                        <div class="period-header">
-                            <span class="period-icon">📆</span>
-                            <span class="period-name">30 дней</span>
-                        </div>
-                        <div class="period-value" id="stats30Days">0</div>
-                        <div class="period-avg">~<span id="avg30">0</span>/день</div>
+                    
+                    <div class="btn-group">
+                        <button class="btn btn-primary" id="generateCodeBtn">Получить код</button>
+                        <button class="btn btn-secondary hidden" id="newCodeBtn" title="Получить новый код">🔄</button>
                     </div>
-                    <div class="period-card">
-                        <div class="period-header">
-                            <span class="period-icon">🗓️</span>
-                            <span class="period-name">90 дней</span>
-                        </div>
-                        <div class="period-value" id="stats90Days">0</div>
-                        <div class="period-avg">~<span id="avg90">0</span>/день</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="settings-section">
-                <h2 class="section-title">
-                    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M2.5.5A.5.5 0 0 1 3 0h10a.5.5 0 0 1 .5.5c0 .538-.012 1.05-.034 1.536a3 3 0 1 1-1.133 5.89c-.79 1.865-1.878 2.777-2.833 3.011v2.173l1.425.356c.194.048.377.135.537.255L13.3 15.1a.5.5 0 0 1-.3.9H3a.5.5 0 0 1-.3-.9l1.838-1.379c.16-.12.343-.207.537-.255L6.5 13.11v-2.173c-.955-.234-2.043-1.146-2.833-3.012a3 3 0 1 1-1.132-5.89A33.076 33.076 0 0 1 2.5.5zm.099 2.54a2 2 0 0 0 .72 3.935c-.333-1.05-.588-2.346-.72-3.935zm10.083 3.935a2 2 0 0 0 .72-3.935c-.133 1.59-.388 2.885-.72 3.935z"/>
-                    </svg>
-                    Рекорды
-                </h2>
-                <div class="records-grid">
-                    <div class="record-item">
-                        <div class="record-icon">🔥</div>
-                        <div class="record-info">
-                            <div class="record-value" id="statsBestHour">--:--</div>
-                            <div class="record-label">Пик активности</div>
-                        </div>
-                    </div>
-                    <div class="record-item">
-                        <div class="record-icon">📈</div>
-                        <div class="record-info">
-                            <div class="record-value" id="statsBestDay">—</div>
-                            <div class="record-label">Лучший день</div>
-                        </div>
-                    </div>
-                    <div class="record-item">
-                        <div class="record-icon">⚡</div>
-                        <div class="record-info">
-                            <div class="record-value" id="statsBestDayClicks">0</div>
-                            <div class="record-label">Макс. за день</div>
-                        </div>
-                    </div>
-                    <div class="record-item">
-                        <div class="record-icon">🕐</div>
-                        <div class="record-info">
-                            <div class="record-value" id="statsLastClick">—</div>
-                            <div class="record-label">Последний клик</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="settings-section">
-                <h2 class="section-title">
-                    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M8.837 1.626c-.246-.835-1.428-.835-1.674 0l-.289.978a.75.75 0 01-.925.527l-.977-.289c-.835-.246-1.587.591-1.342 1.426l.29.977a.75.75 0 01-.528.925l-.978.289c-.835.246-.835 1.428 0 1.674l.978.289a.75.75 0 01.527.925l-.289.977c-.246.835.591 1.587 1.426 1.342l.977-.29a.75.75 0 01.925.528l.289.978c.246.835 1.428.835 1.674 0l.289-.978a.75.75 0 01.925-.527l.977.289c.835.246 1.587-.591 1.342-1.426l-.29-.977a.75.75 0 01.528-.925l.978-.289c.835-.246.835-1.428 0-1.674l-.978-.289a.75.75 0 01-.527-.925l.289-.977c.246-.835-.591-1.587-1.426-1.342l-.977.29a.75.75 0 01-.925-.528l-.289-.978zM8 11a3 3 0 100-6 3 3 0 000 6z"/>
-                    </svg>
-                    Управление
-                </h2>
-                <div class="stats-controls">
-                    <div class="control-row">
-                        <div class="control-info">
-                            <label for="storeHistory" class="control-label">Сохранять историю</label>
-                        </div>
-                        <label class="switch">
-                            <input type="checkbox" id="storeHistory" aria-label="Сохранять историю">
-                            <span class="switch-slider"></span>
-                        </label>
-                    </div>
-                    <div class="control-row">
-                        <div class="control-info">
-                            <label for="statsTimezoneOffset" class="control-label">Часовой пояс</label>
-                        </div>
-                        <select id="statsTimezoneOffset" class="select-compact" title="Часовой пояс" aria-label="Часовой пояс"></select>
-                    </div>
-                </div>
-                <div class="stats-actions">
-                    <button class="btn btn-secondary btn-sm" id="exportJson">
-                        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                            <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
-                            <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+                    
+                    <p class="telegram-desc telegram-instructions">
+                        1. Нажмите на код чтобы скопировать<br>
+                        2. Отправьте боту <a href="https://t.me/clickuved_bot" target="_blank" rel="noopener" class="link-primary">@clickuved_bot</a>
+                    </p>
+                    
+                    <a href="https://t.me/clickuved_bot" target="_blank" rel="noopener" class="btn btn-telegram" id="openBotBtn">
+                        <svg class="btn-icon-svg" width="16" height="16" viewBox="0 0 24 24" fill="white">
+                            <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.161c-.18 1.897-.962 6.502-1.359 8.627-.168.9-.5 1.201-.82 1.23-.697.064-1.226-.461-1.901-.903-1.056-.692-1.653-1.123-2.678-1.799-1.185-.781-.417-1.21.258-1.911.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.139-5.062 3.345-.479.329-.913.489-1.302.481-.428-.009-1.252-.242-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.831-2.529 6.998-3.015 3.333-1.386 4.025-1.627 4.477-1.635.099-.002.321.023.465.141.12.098.153.228.166.331.013.103.03.336.017.519z"/>
                         </svg>
-                        Экспорт JSON
-                    </button>
-                    <button class="btn btn-secondary btn-sm" id="exportCsv">
-                        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                            <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
-                            <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
-                        </svg>
-                        Экспорт CSV
-                    </button>
-                    <button class="btn btn-danger btn-sm" id="resetStats">
-                        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                            <path d="M2.5 1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1H3v9a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V4h.5a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H10a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1H2.5zm3 4a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 .5-.5zM8 5a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7A.5.5 0 0 1 8 5zm3 .5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 1 0z"/>
-                        </svg>
-                        Сбросить
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <div class="tab-content" id="notificationsTab">
-            <div class="settings-section">
-                <h2 class="section-title">
-                    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M8 16a2 2 0 0 0 1.985-1.75c.017-.137-.097-.25-.235-.25h-3.5c-.138 0-.252.113-.235.25A2 2 0 0 0 8 16zm7-5a1 1 0 0 0-1-1v-1a6 6 0 1 0-12 0v1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1z"/>
-                    </svg>
-                    Уведомления
-                </h2>
-
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <div class="setting-title">Показывать уведомления</div>
-                        <div class="setting-desc">Получать уведомления о событиях и достижениях</div>
-                    </div>
-                    <label class="switch">
-                        <input type="checkbox" id="notifications" aria-label="Показывать уведомления">
-                        <span class="switch-slider"></span>
-                    </label>
-                </div>
-
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <div class="setting-title">Компактные уведомления</div>
-                        <div class="setting-desc">Показывать уведомления в сокращенном виде</div>
-                    </div>
-                    <label class="switch">
-                        <input type="checkbox" id="compactNotifications" aria-label="Компактные уведомления">
-                        <span class="switch-slider"></span>
-                    </label>
-                </div>
-
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <div class="setting-title">Звук уведомлений</div>
-                        <div class="setting-desc">Воспроизводить звук при получении уведомления</div>
-                    </div>
-                    <label class="switch">
-                        <input type="checkbox" id="notificationSound" aria-label="Звук уведомлений">
-                        <span class="switch-slider"></span>
-                    </label>
-                </div>
-
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <div class="setting-title">Уведомления о достижениях</div>
-                        <div class="setting-desc">Получать уведомления о вехах (100, 500, 1000 кликов)</div>
-                    </div>
-                    <label class="switch">
-                        <input type="checkbox" id="achievementNotifications" aria-label="Уведомления о достижениях">
-                        <span class="switch-slider"></span>
-                    </label>
-                </div>
-            </div>
-
-            <div class="settings-section license-section">
-                <h2 class="section-title">
-                    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M5.338 1.59a61.44 61.44 0 0 0-2.837.856.481.481 0 0 0-.328.39c-.554 4.157.726 7.19 2.253 9.188a10.725 10.725 0 0 0 2.287 2.233c.346.244.652.42.893.533.12.057.218.095.293.118a.55.55 0 0 0 .101.025.615.615 0 0 0 .1-.025c.076-.023.174-.061.294-.118.24-.113.547-.29.893-.533a10.726 10.726 0 0 0 2.287-2.233c1.527-1.997 2.807-5.031 2.253-9.188a.48.48 0 0 0-.328-.39c-.651-.213-1.75-.56-2.837-.855C9.552 1.29 8.531 1.067 8 1.067c-.53 0-1.552.223-2.662.524zM5.072.56C6.157.265 7.31 0 8 0s1.843.265 2.928.56c1.11.3 2.229.655 2.887.87a1.54 1.54 0 0 1 1.044 1.262c.596 4.477-.787 7.795-2.465 9.99a11.775 11.775 0 0 1-2.517 2.453 7.159 7.159 0 0 1-1.048.625c-.28.132-.581.24-.829.24s-.548-.108-.829-.24a7.158 7.158 0 0 1-1.048-.625 11.777 11.777 0 0 1-2.517-2.453C1.928 10.487.545 7.169 1.141 2.692A1.54 1.54 0 0 1 2.185 1.43 62.456 62.456 0 0 1 5.072.56z"/>
-                        <path d="M10.854 5.146a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708 0l-1.5-1.5a.5.5 0 1 1 .708-.708L7.5 7.793l2.646-2.647a.5.5 0 0 1 .708 0z"/>
-                    </svg>
-                    Статус лицензии
-                </h2>
-
-                <div class="license-status-box" id="licenseStatusBox">
-                    <div class="license-loading">
-                        <div class="spinner"></div>
-                        <span>Проверка лицензии...</span>
-                    </div>
-                </div>
-
-                <div class="license-card" id="licenseCard">
-                    <div class="license-header">
-                        <span class="license-badge" id="licenseBadge">Неизвестно</span>
-                        <span class="license-status-icon" id="licenseStatusIcon">❓</span>
-                    </div>
-                    <div class="license-details">
-                        <div class="license-row">
-                            <span class="license-label">Статус:</span>
-                            <span class="license-value" id="licenseStatusText">Проверка...</span>
-                        </div>
-                        <div class="license-row">
-                            <span class="license-label">Истекает:</span>
-                            <span class="license-value" id="licenseExpiresText">—</span>
-                        </div>
-                        <div class="license-row">
-                            <span class="license-label">Осталось:</span>
-                            <span class="license-value" id="licenseDaysLeft">—</span>
-                        </div>
-                    </div>
-                    <div class="license-actions" id="licenseActions">
-                    </div>
-                </div>
-
-                <div class="license-not-connected" id="licenseNotConnected">
-                    <div class="license-icon">🔐</div>
-                    <h3>Требуется подключение</h3>
-                    <p>Подключите Telegram ниже, чтобы активировать расширение и получить 24 часа бесплатного пробного периода!</p>
-                </div>
-            </div>
-
-            <div class="settings-section">
-                <h2 class="section-title">
-                    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM8.287 5.906c-.778.324-2.334.994-4.666 2.01-.378.15-.577.298-.595.442-.03.243.275.339.69.47l.175.055c.408.133.958.288 1.243.294.26.006.549-.1.868-.32 2.179-1.471 3.304-2.214 3.374-2.23.05-.012.12-.026.166.016.047.041.042.12.037.141-.03.129-1.227 1.241-1.846 1.817-.193.18-.33.307-.358.336a8.154 8.154 0 0 1-.188.186c-.38.366-.664.64.015 1.088.327.216.589.393.85.571.284.194.568.387.936.629.093.06.183.125.27.187.331.236.63.448.997.414.214-.02.435-.22.547-.82.265-1.417.786-4.486.906-5.751a1.426 1.426 0 0 0-.013-.315.337.337 0 0 0-.114-.217.526.526 0 0 0-.31-.093c-.3.005-.763.166-2.984 1.09z"/>
-                    </svg>
-                    Telegram уведомления
-                </h2>
-
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <div class="setting-title">Включить Telegram</div>
-                        <div class="setting-desc">Отправлять уведомления о заявках в Telegram</div>
-                    </div>
-                    <label class="switch">
-                        <input type="checkbox" id="telegramEnabled" aria-label="Включить Telegram уведомления">
-                        <span class="switch-slider"></span>
-                    </label>
-                </div>
-
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <div class="setting-title">Статус подключения</div>
-                        <div class="setting-desc" id="telegramStatusText">Не подключено</div>
-                    </div>
-                    <div class="telegram-status" id="telegramStatus">
-                        <span class="status-indicator status-disconnected"></span>
-                    </div>
-                </div>
-
-                <div class="setting-row telegram-connect-row">
-                    <div class="setting-info">
-                        <div class="setting-title">Подключить Telegram</div>
-                        <div class="setting-desc">Нажмите для получения ссылки подключения</div>
-                    </div>
-                    <button class="btn btn-primary" id="connectTelegram">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                            <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM8.287 5.906c-.778.324-2.334.994-4.666 2.01-.378.15-.577.298-.595.442-.03.243.275.339.69.47l.175.055c.408.133.958.288 1.243.294.26.006.549-.1.868-.32 2.179-1.471 3.304-2.214 3.374-2.23.05-.012.12-.026.166.016.047.041.042.12.037.141-.03.129-1.227 1.241-1.846 1.817-.193.18-.33.307-.358.336a8.154 8.154 0 0 1-.188.186c-.38.366-.664.64.015 1.088.327.216.589.393.85.571.284.194.568.387.936.629.093.06.183.125.27.187.331.236.63.448.997.414.214-.02.435-.22.547-.82.265-1.417.786-4.486.906-5.751a1.426 1.426 0 0 0-.013-.315.337.337 0 0 0-.114-.217.526.526 0 0 0-.31-.093c-.3.005-.763.166-2.984 1.09z"/>
-                        </svg>
-                        Подключить
-                    </button>
-                </div>
-
-                <div class="telegram-link-box" id="telegramLinkBox">
-                    <p>Нажмите на ссылку ниже, чтобы подключить Telegram:</p>
-                    <a href="#" id="telegramLink" class="telegram-link" target="_blank" rel="noopener noreferrer">
-                        Открыть бота в Telegram
+                        Открыть бота
                     </a>
-                    <p class="telegram-link-hint">⏱ Ссылка действительна 10 минут</p>
-                    <button class="btn btn-secondary btn-sm" id="checkConnection">Проверить подключение</button>
+                    
+                    <p class="telegram-status" id="connectionStatus"></p>
                 </div>
-
-                <div class="setting-row telegram-disconnect-row" id="telegramDisconnectRow">
-                    <div class="setting-info">
-                        <div class="setting-title">Отключить уведомления</div>
-                        <div class="setting-desc">Прекратить получать уведомления в Telegram</div>
-                    </div>
-                    <button class="btn btn-danger btn-sm" id="disconnectTelegram">Отключить</button>
-                </div>
-
-                <div class="setting-row" id="testNotificationRow">
-                    <div class="setting-info">
-                        <div class="setting-title">Тестовое уведомление</div>
-                        <div class="setting-desc">Отправить тестовое уведомление в Telegram</div>
-                    </div>
-                    <button class="btn btn-secondary" id="testNotification">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                            <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
-                            <path d="M10.97 4.97a.235.235 0 0 0-.02.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-1.071-1.05z"/>
+                
+                <div class="telegram-section hidden" id="telegramConnected">
+                    <div class="telegram-icon telegram-icon-success">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="white">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
                         </svg>
-                        Тест
-                    </button>
-                </div>
-
-                <div class="telegram-help">
-                    <details>
-                        <summary>📖 Как работают Telegram уведомления?</summary>
-                        <ol>
-                            <li>Нажмите кнопку "Подключить"</li>
-                            <li>Перейдите по появившейся ссылке в Telegram</li>
-                            <li>Нажмите /start в боте</li>
-                            <li>Готово! Теперь при клике автокликера вам будет приходить уведомление с деталями заявки</li>
-                        </ol>
-                        <p><strong>В уведомлении будет:</strong> ID транзакции, сумма, способ оплаты, реквизиты, банк</p>
-                    </details>
+                    </div>
+                    <h3 class="telegram-title">Telegram подключён</h3>
+                    <p class="telegram-desc" id="connectedUsername">@username</p>
+                    <p class="telegram-status" id="verifyStatus"></p>
+                    
+                    <div class="btn-group btn-group-spaced">
+                        <button class="btn btn-secondary" id="verifyBtn" title="Проверить привязку на сервере">🔍 Проверить</button>
+                        <button class="btn btn-telegram" id="testNotifyBtn" title="Отправить тестовое уведомление">🔔 Тест</button>
+                    </div>
+                    <button class="btn btn-danger btn-full-spaced" id="disconnectBtn">Отключить</button>
                 </div>
             </div>
+        </section>
 
-            <div class="settings-section">
-                <h2 class="section-title">
-                    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0zM2.04 4.326c.325 1.329 2.532 2.54 3.717 3.19.48.263.793.434.743.484-.08.08-.162.158-.242.234-.416.396-.787.749-.758 1.266.035.634.618.824 1.214 1.017.577.188 1.168.38 1.286.983.082.417-.075.988-.22 1.52-.215.782-.406 1.48.22 1.48 1.5-.5 3.798-3.186 4-5 .138-1.243-2-2-3.5-2.5-.478-.16-.755.081-.99.284-.172.15-.322.279-.51.216-.445-.148-2.5-2-1.5-2.5.78-.39.952-.171 1.227.182.078.099.163.208.273.318.609.304.662-.132.723-.633.039-.322.081-.671.277-.867.434-.434 1.265-.791 2.028-1.12.712-.306 1.365-.587 1.579-.88A7 7 0 1 0 2.04 4.327z"/>
-                    </svg>
-                    Конфиденциальность
-                </h2>
-
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <div class="setting-title">Телеметрия</div>
-                        <div class="setting-desc">Отправлять анонимную статистику использования для улучшения расширения</div>
+        <!-- License Section -->
+        <section class="options-section">
+            <h2 class="options-section-title">Лицензия</h2>
+            <div class="options-group">
+                <div class="option-row">
+                    <div class="option-info">
+                        <span class="option-label" id="licenseStatus">Загрузка...</span>
+                        <span class="option-desc" id="licenseDetails"></span>
                     </div>
-                    <label class="switch">
-                        <input type="checkbox" id="telemetryEnabled" aria-label="Телеметрия">
-                        <span class="switch-slider"></span>
+                    <span class="license-badge" id="licenseBadgeOptions">—</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Settings Section -->
+        <section class="options-section">
+            <h2 class="options-section-title">Настройки расширения</h2>
+            <div class="options-group">
+                <div class="option-row">
+                    <div class="option-info">
+                        <span class="option-label">Звуковые уведомления</span>
+                        <span class="option-desc">Звук при выполнении клика</span>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox" id="soundEnabled" checked aria-label="Звуковые уведомления">
+                        <span class="toggle-track"></span>
+                    </label>
+                </div>
+                <div class="option-row">
+                    <div class="option-info">
+                        <span class="option-label">Push-уведомления</span>
+                        <span class="option-desc">Уведомления браузера о действиях</span>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox" id="notificationsEnabled" checked aria-label="Push-уведомления">
+                        <span class="toggle-track"></span>
+                    </label>
+                </div>
+                <div class="option-row">
+                    <div class="option-info">
+                        <span class="option-label">Авто-обновление</span>
+                        <span class="option-desc">Перезагрузка при зависании страницы</span>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox" id="autoRefreshEnabled" checked aria-label="Авто-обновление">
+                        <span class="toggle-track"></span>
                     </label>
                 </div>
             </div>
-        </div>
+            <p class="options-hint">💡 Настройки Telegram-уведомлений — в боте <a href="https://t.me/clickuved_bot" target="_blank" rel="noopener" class="link-primary">@clickuved_bot</a></p>
+        </section>
 
-        <div class="tab-content" id="about">
-            <div class="settings-section about-center">
-                <div class="about-logo">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M9 18h6"/>
-                        <path d="M10 22h4"/>
-                        <path d="M12 2a7 7 0 0 0-4 12.9V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.1A7 7 0 0 0 12 2z"/>
-                    </svg>
+        <!-- Stats Section -->
+        <section class="options-section">
+            <h2 class="options-section-title">Статистика</h2>
+            <div class="options-group">
+                <div class="option-row">
+                    <div class="option-info">
+                        <span class="option-label">Всего кликов</span>
+                    </div>
+                    <span class="stat-value-inline" id="statTotal">0</span>
                 </div>
-                <h2 class="about-title">Exotic Assistant Pro</h2>
-                <p class="about-version">Версия 4.0.0 (декабрь 2025)</p>
-                <div class="about-features">
-                    <h3>✨ Ключевые возможности</h3>
-                    <ul>
-                        <li>⚡ Автоматизация кликов для операторов Exotic</li>
-                        <li>📊 Подробная статистика, история и графики</li>
-                        <li>🔔 Уведомления в браузере и Telegram</li>
-                        <li>🛡️ Антифрод и защита от ошибок</li>
-                        <li>🤖 Интеграция с Telegram-ботом</li>
-                        <li>🌗 Поддержка тёмной и светлой темы</li>
-                        <li>🔒 Конфиденциальность и безопасность данных</li>
-                    </ul>
+                <div class="option-row">
+                    <div class="option-info">
+                        <span class="option-label">Сегодня</span>
+                    </div>
+                    <span class="stat-value-inline" id="statToday">0</span>
                 </div>
-                <div class="about-buttons">
-                    <a class="btn btn-primary" href="https://t.me/Asadov_p2p" target="_blank" rel="noopener" title="Техподдержка в Telegram">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 0C5.373 0 0 5.373 0 12c0 2.917 1.043 5.59 2.775 7.668L.924 23.088a.5.5 0 00.588.588l3.42-1.851A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0z"/>
-                        </svg>
-                        Техподдержка в Telegram
-                    </a>
+                <div class="option-row">
+                    <div class="option-info">
+                        <span class="option-label">За сессию</span>
+                    </div>
+                    <span class="stat-value-inline" id="statSession">0</span>
                 </div>
-                <p class="about-footer">
-                    © 2026 Exotic Assistant. Все права защищены.<br>
-                    <b>Контакты:</b> <a href="mailto:support@exotic.company" title="Почта поддержки">support@exotic.company</a> &nbsp;|&nbsp; <a href="https://t.me/Asadov_p2p" target="_blank" rel="noopener" title="Telegram">@Asadov_p2p</a>
-                </p>
+                <div class="option-row">
+                    <button class="btn btn-secondary btn-full" id="resetStatsBtn">Сбросить статистику</button>
+                </div>
             </div>
-        </div>
+        </section>
+
+        <!-- About Section -->
+        <section class="options-section">
+            <h2 class="options-section-title">О программе</h2>
+            <div class="options-group">
+                <div class="option-row option-row-vertical">
+                    <span class="option-label">Exotic Assistant v5.0</span>
+                    <span class="option-desc">Автоматизация работы с заявками на платформе Exotic</span>
+                    <span class="option-desc option-desc-features">
+                        • Расширенная статистика с графиком<br>
+                        • Авто-перезагрузка при зависании<br>
+                        • Telegram уведомления о кликах
+                    </span>
+                    <span class="option-desc option-desc-support">
+                        Поддержка: <a href="https://t.me/YaMob" target="_blank" rel="noopener" class="link-primary">@YaMob</a>
+                    </span>
+                </div>
+            </div>
+        </section>
     </div>
 
     <script src="options.js"></script>

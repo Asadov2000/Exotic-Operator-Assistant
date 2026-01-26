@@ -3,14 +3,28 @@ main = "worker.js"
 compatibility_date = "2024-01-01"
 
 # KV Namespace для хранения пользователей
-# После создания KV в dashboard, добавьте ID сюда:
-# kv_namespaces = [
-#   { binding = "USERS", id = "ваш_kv_namespace_id" }
-# ]
+kv_namespaces = [
+  { binding = "USERS", id = "a772e84b8fcd42e9a2f9e1c08c904ec8" }
+]
 
 [vars]
-# Эти переменные лучше добавить через Dashboard как секреты:
-# TELEGRAM_BOT_TOKEN = "ваш_токен_бота"
+BOT_USERNAME = "clickuved_bot"
+ADMIN_USERNAME = "YaMob"
+ADMIN_TELEGRAM_ID = "5328212518"
+LOG_CHAT_ID = "-1003581750608"
 
-# Для production используйте secrets:
-# wrangler secret put TELEGRAM_BOT_TOKEN
+# ========== БЕЗОПАСНОСТЬ ==========
+# ОБЯЗАТЕЛЬНЫЕ секреты (добавьте через CLI):
+# 
+# 1. Токен бота Telegram:
+#    wrangler secret put TELEGRAM_BOT_TOKEN
+#
+# 2. Токен для админских API эндпоинтов:
+#    wrangler secret put ADMIN_TOKEN
+#
+# 3. Секретная фраза для входа в админ-панель бота:
+#    wrangler secret put ADMIN_SECRET_PHRASE
+#
+# 4. Secret для верификации webhook от Telegram (РЕКОМЕНДУЕТСЯ):
+#    wrangler secret put TELEGRAM_WEBHOOK_SECRET
+#    После добавления, переустановите webhook через /api/set-webhook

@@ -1,0 +1,31 @@
+{
+  "name": "exotic-telegram-worker",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker для Exotic Operator Assistant",
+  "main": "worker.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint worker.js"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240117.0",
+    "@swc/core": "^1.15.8",
+    "esbuild-wasm": "^0.27.2",
+    "eslint": "^8.56.0",
+    "miniflare": "^3.20240129.0",
+    "vitest": "^1.2.0",
+    "wrangler": "^4.58.0"
+  },
+  "keywords": [
+    "cloudflare",
+    "workers",
+    "telegram",
+    "bot"
+  ],
+  "author": "",
+  "license": "ISC"
+}

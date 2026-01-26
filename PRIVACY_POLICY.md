@@ -1,6 +1,6 @@
 # Политика конфиденциальности - Exotic Operator Assistant
 
-**Дата вступления в силу:** Январь 2025
+**Дата вступления в силу:** Январь 2026
 
 ## Введение
 
@@ -64,4 +64,4 @@
 
 ---
 
-© 2025 Exotic Operator Assistant
+© 2026 Exotic Operator Assistant

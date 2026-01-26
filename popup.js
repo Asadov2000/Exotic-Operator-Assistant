@@ -1,18 +1,468 @@
 const api = globalThis.browser ?? chrome;
 
+// ========== КОНСТАНТЫ ==========
+const AUTO_REFRESH_INTERVAL = 5000; // 5 секунд (оптимизация)
+const MAX_ACTIVITY_ITEMS = 10;
+const ANIMATION_DURATION = 300; // мс
+
 class PopupController {
+  constructor() {
+    this.elements = this.cacheElements();
+    this.state = {
+      enabled: false,
+      stats: {},
+      license: null,
+      activity: []
+    };
+    this.autoRefreshId = null;
+    this.init();
+  }
+
+  cacheElements() {
+    return {
+      toggleSwitch: document.getElementById('toggleSwitch'),
+      toggleCard: document.getElementById('toggleCard'),
+      statusDot: document.getElementById('statusDot'),
+      statusText: document.getElementById('statusText'),
+      toggleHint: document.getElementById('toggleHint'),
+      todayClicks: document.getElementById('todayClicks'),
+      sessionClicks: document.getElementById('sessionClicks'),
+      totalClicks: document.getElementById('totalClicks'),
+      avgClicks: document.getElementById('avgClicks'),
+      bestDay: document.getElementById('bestDay'),
+      activeDays: document.getElementById('activeDays'),
+      licenseBadge: document.getElementById('licenseBadge'),
+      licenseCard: document.getElementById('licenseCard'),
+      licenseIcon: document.getElementById('licenseIcon'),
+      licenseType: document.getElementById('licenseType'),
+      licenseExpires: document.getElementById('licenseExpires'),
+      activityList: document.getElementById('activityList'),
+      connectionStatus: document.getElementById('connectionStatus'),
+      refreshBtn: document.getElementById('refreshBtn'),
+      clearActivityBtn: document.getElementById('clearActivityBtn'),
+      settingsBtn: document.getElementById('settingsBtn'),
+      chartBars: document.getElementById('chartBars'),
+      efficiency: document.getElementById('efficiency')
+    };
+  }
+
+  async init() {
+    await this.loadState();
+    this.setupEventListeners();
+    this.updateUI();
+    this.startAutoRefresh();
+    this.checkTargetTab();
+    await this.checkFirstRun();
+  }
+
+  async checkFirstRun() {
+    try {
+      const result = await chrome.storage.local.get('firstRunShown');
+      if (!result.firstRunShown && !this.state.license?.valid) {
+        await chrome.storage.local.set({ firstRunShown: true });
+        this.addActivity('👋 Добро пожаловать! Подключите Telegram', 'info');
+        setTimeout(() => {
+          if (confirm('Подключите Telegram для получения бесплатного пробного периода.\n\nОткрыть настройки?')) {
+            this.openSettings();
+          }
+        }, 1000);
+      }
+    } catch (e) {
+      console.log('First run check error:', e);
+    }
+  }
+
+  async loadState() {
+    try {
+      const response = await this.sendMessage({ action: 'getState' });
+      if (response) {
+        this.state.enabled = response.enabled || false;
+        this.state.stats = response.stats || {};
+        this.state.license = response.license || null;
+        this.elements.toggleSwitch.checked = this.state.enabled;
+      }
+    } catch (error) {
+      console.log('Load state error:', error);
+    }
+  }
+
+  setupEventListeners() {
+    this.elements.toggleSwitch.addEventListener('change', () => this.toggleClicker());
+    this.elements.refreshBtn.addEventListener('click', () => this.refresh());
+    this.elements.clearActivityBtn?.addEventListener('click', () => this.clearActivity());
+    this.elements.settingsBtn.addEventListener('click', () => this.openSettings());
+    this.elements.licenseCard?.addEventListener('click', () => this.openSettings());
+  }
+
+  async clearActivity() {
+    this.state.activity = [];
+    this.renderActivity();
+    await this.sendMessage({ action: 'clearNotifications' });
+    this.addActivity('🧹 История очищена', 'info');
+  }
+
+  async toggleClicker() {
+    const wantEnabled = this.elements.toggleSwitch.checked;
+    
+    try {
+      const response = await this.sendMessage({
+        action: 'toggle',
+        enabled: wantEnabled
+      });
+
+      if (!response) {
+        throw new Error('Нет ответа от сервиса');
+      }
+
+      if (response.error === 'LICENSE_REQUIRED') {
+        this.elements.toggleSwitch.checked = false;
+        this.state.enabled = false;
+        
+        let message = '🔐 Требуется лицензия';
+        if (response.license?.error === 'NOT_CONNECTED') {
+          message = '🔗 Подключите Telegram';
+        } else if (response.license?.error === 'EXPIRED') {
+          message = '⏰ Лицензия истекла';
+        }
+        
+        this.addActivity(message, 'error');
+      } else {
+        this.state.enabled = wantEnabled;
+        this.addActivity(
+          this.state.enabled ? '✅ Автокликер включен' : '⏸️ Автокликер выключен',
+          this.state.enabled ? 'success' : 'info'
+        );
+      }
+      
+      this.updateUI();
+    } catch (error) {
+      this.elements.toggleSwitch.checked = !wantEnabled;
+      this.addActivity('❌ Ошибка переключения', 'error');
+    }
+  }
 
   updateUI() {
-    this.updateStatus();
+    this.updateToggleState();
     this.updateStats();
-    this.updateProgress();
-    this.updateActivity();
-    this.updateLicenseInfo();
-    this.updateTargetInfo();
+    this.updateLicense();
+  }
+
+  updateToggleState() {
+    const { enabled } = this.state;
+    
+    this.elements.toggleCard.classList.toggle('active', enabled);
+    this.elements.statusDot.classList.toggle('active', enabled);
+    this.elements.statusText.textContent = enabled ? 'Активен' : 'Выключен';
+    this.elements.toggleHint.textContent = enabled ? 'Мониторинг запущен' : 'Нажмите для запуска';
+  }
+
+  updateStats() {
+    const { stats } = this.state;
+    
+    this.elements.todayClicks.textContent = this.formatNumber(stats.todayClicks || 0);
+    this.elements.sessionClicks.textContent = this.formatNumber(stats.sessionClicks || 0);
+    this.elements.totalClicks.textContent = this.formatNumber(stats.totalClicks || 0);
+    
+    // Расширенная статистика
+    this.updateExtendedStats();
+    
+    // Обновляем эффективность
+    if (stats.efficiency && this.elements.efficiency) {
+      const accuracy = Math.round(stats.efficiency.accuracy || 100);
+      this.elements.efficiency.textContent = `${accuracy}%`;
+      this.elements.efficiency.className = 'chart-efficiency';
+      if (accuracy < 70) {
+        this.elements.efficiency.classList.add('danger');
+      } else if (accuracy < 90) {
+        this.elements.efficiency.classList.add('warning');
+      }
+    }
+    
+    // Рисуем график
+    this.renderChart();
+  }
+
+  updateExtendedStats() {
+    const { stats } = this.state;
+    const history = stats.history?.days || {};
+    const days = Object.keys(history);
+    
+    // Количество активных дней
+    const activeDays = days.length;
+    if (this.elements.activeDays) {
+      this.elements.activeDays.textContent = activeDays;
+    }
+    
+    // Среднее кликов в день
+    if (this.elements.avgClicks) {
+      if (activeDays > 0) {
+        const totalFromHistory = days.reduce((sum, day) => sum + (history[day].total || 0), 0);
+        const avg = Math.round(totalFromHistory / activeDays);
+        this.elements.avgClicks.textContent = this.formatNumber(avg);
+      } else {
+        this.elements.avgClicks.textContent = '0';
+      }
+    }
+    
+    // Лучший день (рекорд)
+    if (this.elements.bestDay) {
+      if (activeDays > 0) {
+        const best = Math.max(...days.map(day => history[day].total || 0));
+        this.elements.bestDay.textContent = this.formatNumber(best);
+        if (stats.todayClicks >= best && best > 0) {
+          this.elements.bestDay.classList.add('success');
+        } else {
+          this.elements.bestDay.classList.remove('success');
+        }
+      } else {
+        this.elements.bestDay.textContent = '0';
+      }
+    }
+  }
+
+  renderChart() {
+    const container = this.elements.chartBars;
+    if (!container) return;
+    
+    const { stats } = this.state;
+    const history = stats.history?.days || {};
+    
+    // Получаем данные за последние 24 часа
+    const now = new Date();
+    const currentHour = now.getUTCHours();
+    const todayKey = this.getUTCDateKey(now);
+    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const yesterdayKey = this.getUTCDateKey(yesterday);
+    
+    const todayData = history[todayKey]?.perHour || [];
+    const yesterdayData = history[yesterdayKey]?.perHour || [];
+    
+    // Собираем данные за 24 часа (от текущего часа назад)
+    const hours = [];
+    for (let i = 23; i >= 0; i--) {
+      const hourIndex = (currentHour - i + 24) % 24;
+      const isYesterday = (currentHour - i) < 0;
+      const data = isYesterday ? yesterdayData : todayData;
+      hours.push({
+        value: data[hourIndex] || 0,
+        isCurrent: i === 0,
+        hour: hourIndex
+      });
+    }
+    
+    // Находим максимум для масштабирования
+    const maxValue = Math.max(1, ...hours.map(h => h.value));
+    
+    // Рисуем бары
+    container.innerHTML = hours.map((h, idx) => {
+      const height = Math.max(2, (h.value / maxValue) * 100);
+      const classes = ['chart-bar'];
+      if (h.isCurrent) classes.push('current');
+      if (h.value === 0) classes.push('empty');
+      const safeValue = parseInt(h.value, 10) || 0;
+      const hourStr = h.hour.toString().padStart(2, '0') + ':00';
+      return `<div class="${classes.join(' ')}" style="height: ${height}%" title="${hourStr} — ${safeValue} кликов"></div>`;
+    }).join('');
+    
+    // Добавляем метки времени
+    this.renderChartLabels(hours);
+  }
+
+  renderChartLabels(hours) {
+    // Находим контейнер меток или создаём его
+    let labelsContainer = document.getElementById('chart-labels');
+    if (!labelsContainer) {
+      labelsContainer = document.createElement('div');
+      labelsContainer.id = 'chart-labels';
+      labelsContainer.className = 'chart-labels';
+      // Вставляем после контейнера с барами
+      if (this.elements.chartBars && this.elements.chartBars.parentNode) {
+        this.elements.chartBars.parentNode.appendChild(labelsContainer);
+      }
+    }
+    
+    // Показываем метки каждые 6 часов (4 метки)
+    const labels = [];
+    for (let i = 0; i < 24; i += 6) {
+      if (hours[i]) {
+        const hourStr = hours[i].hour.toString().padStart(2, '0');
+        labels.push(`<span class="chart-label" style="left: ${(i / 24) * 100}%">${hourStr}:00</span>`);
+      }
+    }
+    // Добавляем текущий час справа
+    if (hours.length > 0) {
+      const currentHourStr = hours[hours.length - 1].hour.toString().padStart(2, '0');
+      labels.push(`<span class="chart-label current-label" style="left: calc(100% - 2px)">${currentHourStr}:00</span>`);
+    }
+    
+    labelsContainer.innerHTML = labels.join('');
+  }
+
+  getUTCDateKey(date) {
+    return date.toISOString().slice(0, 10);
+  }
+
+  updateLicense() {
+    const { license } = this.state;
+    const badge = this.elements.licenseBadge;
+    const card = this.elements.licenseCard;
+    const icon = this.elements.licenseIcon;
+    const type = this.elements.licenseType;
+    const expires = this.elements.licenseExpires;
+
+    badge.className = 'header-badge';
+    card.className = 'license-card';
+
+    if (!license || !license.valid) {
+      badge.textContent = '—';
+      icon.textContent = '🔒';
+      type.textContent = 'Нет лицензии';
+      expires.textContent = 'Подключите Telegram для активации';
+      card.classList.add('error');
+      return;
+    }
+
+    const daysLeft = license.daysLeft || 0;
+    const hoursLeft = Math.max(0, Math.ceil((license.expiresAt - Date.now()) / (60 * 60 * 1000)));
+
+    if (license.type === 'trial') {
+      badge.textContent = 'Trial';
+      badge.classList.add('trial');
+      icon.textContent = '🎁';
+      type.textContent = 'Пробный период';
+      expires.textContent = `Осталось ${hoursLeft} ч.`;
+      
+      if (hoursLeft < 6) card.classList.add('warning');
+    } else if (license.type === 'level1') {
+      badge.textContent = 'L1';
+      badge.classList.add('pro');
+      icon.textContent = '⭐';
+      type.textContent = 'Уровень 1';
+      expires.textContent = daysLeft > 0 ? `Осталось ${daysLeft} дн.` : 'Активна';
+      
+      if (daysLeft < 3 && daysLeft > 0) card.classList.add('warning');
+    } else if (license.type === 'level2') {
+      badge.textContent = 'L2';
+      badge.classList.add('pro');
+      icon.textContent = '⭐⭐';
+      type.textContent = 'Уровень 2';
+      expires.textContent = daysLeft > 0 ? `Осталось ${daysLeft} дн.` : 'Активна';
+      
+      if (daysLeft < 3 && daysLeft > 0) card.classList.add('warning');
+    } else if (license.type === 'level3') {
+      badge.textContent = 'L3';
+      badge.classList.add('premium');
+      icon.textContent = '⭐⭐⭐';
+      type.textContent = 'Уровень 3 (Максимум)';
+      expires.textContent = daysLeft > 0 ? `Осталось ${daysLeft} дн.` : 'Активна';
+      
+      if (daysLeft < 3 && daysLeft > 0) card.classList.add('warning');
+    } else {
+      // Для старых или неизвестных типов
+      badge.textContent = 'Pro';
+      badge.classList.add('pro');
+      icon.textContent = '⭐';
+      type.textContent = license.typeName || 'Подписка';
+      expires.textContent = daysLeft > 0 ? `Осталось ${daysLeft} дн.` : 'Активна';
+      
+      if (daysLeft < 3 && daysLeft > 0) card.classList.add('warning');
+    }
+  }
+
+  addActivity(text, type = 'info') {
+    const time = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    this.state.activity.unshift({ text, type, time });
+    if (this.state.activity.length > MAX_ACTIVITY_ITEMS) this.state.activity.pop();
+    this.renderActivity();
+  }
+
+  // Экранирование HTML для защиты от XSS
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  renderActivity() {
+    const { activity } = this.state;
+    const container = this.elements.activityList;
+
+    if (activity.length === 0) {
+      container.innerHTML = '<div class="activity-empty"><span>Ожидание...</span></div>';
+      return;
+    }
+
+    container.innerHTML = activity.map(item => `
+      <div class="activity-item fade-in">
+        <div class="activity-icon ${this.escapeHtml(item.type)}">${this.getActivityIcon(item.type)}</div>
+        <div class="activity-content">
+          <div class="activity-text">${this.escapeHtml(item.text)}</div>
+          <div class="activity-time">${this.escapeHtml(item.time)}</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  getActivityIcon(type) {
+    switch (type) {
+      case 'success': return '✓';
+      case 'error': return '✕';
+      case 'info': return 'ℹ';
+      default: return '•';
+    }
+  }
+
+  async checkTargetTab() {
+    const status = this.elements.connectionStatus;
+    const text = status.querySelector('.connection-text');
+
+    try {
+      const tabs = await api.tabs.query({ url: '*://*.exotic.company/*' });
+      
+      if (tabs.length > 0) {
+        status.classList.add('connected');
+        status.classList.remove('disconnected');
+        text.textContent = 'Страница найдена';
+      } else {
+        status.classList.remove('connected');
+        status.classList.add('disconnected');
+        text.textContent = 'Откройте exotic.company';
+      }
+    } catch (e) {
+      status.classList.remove('connected', 'disconnected');
+      text.textContent = 'Проверка...';
+    }
+  }
+
+  refresh() {
+    this.loadState().then(() => {
+      this.updateUI();
+      this.checkTargetTab();
+    });
+    
+    this.elements.refreshBtn.style.transform = 'rotate(360deg)';
+    setTimeout(() => this.elements.refreshBtn.style.transform = '', ANIMATION_DURATION);
+  }
+
+  startAutoRefresh() {
+    // Очищаем предыдущий интервал если есть
+    if (this.autoRefreshId) {
+      clearInterval(this.autoRefreshId);
+    }
+    this.autoRefreshId = setInterval(() => {
+      this.loadState().then(() => this.updateUI());
+      this.checkTargetTab();
+    }, AUTO_REFRESH_INTERVAL);
+    
+    // Очищаем при закрытии popup
+    window.addEventListener('unload', () => {
+      if (this.autoRefreshId) {
+        clearInterval(this.autoRefreshId);
+      }
+    }, { once: true });
   }
 
   openSettings() {
-    // Открытие страницы настроек (options.html)
     if (chrome.runtime.openOptionsPage) {
       chrome.runtime.openOptionsPage();
     } else {
@@ -20,342 +470,28 @@ class PopupController {
     }
   }
 
-  refreshData() {
-    // Принудительно обновить состояние
-    this.loadState();
-    this.updateUI();
-    this.checkTargetTab();
-  }
-
-    async ensureNotificationPermission() {
-      if (!('Notification' in window)) return;
-      if (Notification.permission === 'default') {
-        try {
-          await Notification.requestPermission();
-        } catch (e) {
-          // Игнорируем ошибку
-        }
-      }
-    }
-  constructor() {
-    this.elements = {
-      toggleSwitch: document.getElementById('toggleSwitch'),
-      statusText: document.getElementById('statusText'),
-      statusIndicator: document.getElementById('statusIndicator'),
-      totalClicks: document.getElementById('totalClicks'),
-      todayClicks: document.getElementById('todayClicks'),
-      accuracy: document.getElementById('accuracy'),
-      sessionClicks: document.getElementById('sessionClicks'),
-      progressPercent: document.getElementById('progressPercent'),
-      progressFill: document.getElementById('progressFill'),
-      activityList: document.getElementById('activityList'),
-      targetDot: document.getElementById('targetDot'),
-      targetText: document.getElementById('targetText'),
-       // pageUrl: document.getElementById('pageUrl'),
-      refreshBtn: document.getElementById('refreshBtn'),
-      settingsBtn: document.getElementById('settingsBtn')
-    };
-
-    this.state = {
-      enabled: false,
-      stats: {},
-      activity: [],
-      targetActive: false,
-      lastUpdate: null
-    };
-
-    this.init();
-  }
-
-  async init() {
-    await this.loadState();
-    await this.ensureNotificationPermission();
-    this.setupEventListeners();
-    this.updateUI();
-    this.startAutoRefresh();
-    this.checkTargetTab();
-  }
-
-  async loadState() {
-    try {
-      const response = await this.sendMessage({ action: 'getState' });
-      
-      if (response) {
-        this.state.enabled = response.enabled || false;
-        this.state.stats = response.stats || {};
-        this.state.license = response.license || null;
-        
-        this.elements.toggleSwitch.checked = this.state.enabled;
-        this.updateLicenseInfo();
-      }
-    } catch (error) {
-      console.log('Не удалось загрузить состояние:', error);
-    }
-  }
-
-  setupEventListeners() {
-    this.elements.toggleSwitch.addEventListener('change', () => this.toggleClicker());
-    this.elements.refreshBtn.addEventListener('click', () => this.refreshData());
-    this.elements.settingsBtn.addEventListener('click', () => this.openSettings());
-  }
-
-  async toggleClicker() {
-    const wantEnabled = this.elements.toggleSwitch.checked;
-    try {
-      const response = await this.sendMessage({
-        action: 'toggle',
-        enabled: wantEnabled
-      });
-      // Проверяем ошибку лицензии
-      if (response.error === 'LICENSE_REQUIRED') {
-        this.elements.toggleSwitch.checked = false;
-        this.state.enabled = false;
-        // Показываем уведомление о лицензии
-        const license = response.license;
-        let message = '🔐 Требуется лицензия';
-        if (license?.error === 'NOT_CONNECTED') {
-          message = '🔗 Подключите Telegram в настройках для активации';
-        } else if (license?.error === 'EXPIRED') {
-          message = '⏰ Лицензия истекла. Продлите подписку.';
-        } else if (license?.error === 'NO_LICENSE') {
-          message = '🎁 Подключите Telegram для получения пробного периода';
-        }
-        this.addActivity(message, 'error');
-        this.updateUI();
-      } else {
-        this.state.enabled = wantEnabled;
-        this.addActivity(
-          this.state.enabled ? 'Автокликер включен' : 'Автокликер выключен',
-          'system'
-        );
-        this.updateUI();
-      }
-    } catch (error) {
-      this.elements.toggleSwitch.checked = !wantEnabled;
-    }
-  }
-
-  updateStatus() {
-    if (this.state.enabled) {
-      this.elements.statusText.textContent = 'Включен';
-      this.elements.statusIndicator.classList.add('active');
-    } else {
-      this.elements.statusText.textContent = 'Выключен';
-      this.elements.statusIndicator.classList.remove('active');
-    }
-  }
-
-  updateStats() {
-    const stats = this.state.stats || {};
-    const efficiency = stats.efficiency || {};
-    
-    this.elements.totalClicks.textContent = this.formatNumber(stats.totalClicks || 0);
-    this.elements.todayClicks.textContent = this.formatNumber(stats.todayClicks || 0);
-    this.elements.sessionClicks.textContent = this.formatNumber(stats.sessionClicks || 0);
-    this.elements.accuracy.textContent = `${(efficiency.accuracy || 100).toFixed(1)}%`;
-  }
-
-  updateProgress() {
-    const todayClicks = this.state.stats.todayClicks || 0;
-    const goal = Math.max(todayClicks, 50);
-    const percent = Math.min((todayClicks / goal) * 100, 100);
-    
-    this.elements.progressPercent.textContent = `${Math.round(percent)}%`;
-    this.elements.progressFill.style.width = `${percent}%`;
-  }
-
-  updateActivity() {
-    const container = this.elements.activityList;
-    
-    if (this.state.activity.length === 0) {
-      container.innerHTML = `
-        <div class="activity-item">
-          <div class="activity-icon">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M8 0C3.58 0 0 3.58 0 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm0 14.5c-3.59 0-6.5-2.91-6.5-6.5S4.41 1.5 8 1.5s6.5 2.91 6.5 6.5-2.91 6.5-6.5 6.5zm.75-10.25h-1.5v4.5l3.75 2.25.75-1.23-3-1.77V4.25z"/>
-            </svg>
-          </div>
-          <div class="activity-content">
-            <div class="activity-text">Ожидание активности...</div>
-            <div class="activity-time">--:--</div>
-          </div>
-        </div>
-      `;
-      return;
-    }
-    
-    const recentActivity = this.state.activity.slice(0, 3);
-    
-    container.innerHTML = recentActivity.map(activity => `
-      <div class="activity-item">
-        <div class="activity-icon">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M8 16A8 8 0 1 1 8 0a8 8 0 0 1 0 16zm.93-9.412-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533L8.93 6.588zM8 5.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/>
-          </svg>
-        </div>
-        <div class="activity-content">
-          <div class="activity-text">${activity.text}</div>
-          <div class="activity-time">${activity.time}</div>
-        </div>
-      </div>
-    `).join('');
-  }
-
-  updateTargetInfo() {
-    if (this.state.targetActive) {
-      this.elements.targetDot.classList.add('active');
-      this.elements.targetText.textContent = 'Страница активна';
-        if (this.elements.pageUrl) {
-          this.elements.pageUrl.style.display = 'none';
-        }
-    } else {
-      this.elements.targetDot.classList.remove('active');
-      this.elements.targetText.textContent = 'Страница не обнаружена';
-        if (this.elements.pageUrl) {
-          this.elements.pageUrl.style.display = 'none';
-        }
-    }
-  }
-
-  async checkTargetTab() {
-    try {
-      const urls = [
-        'https://exotic.company/operator/payout_transaction*',
-        'https://gate-1.exotic.company/operator/payout_transaction*',
-        'https://gate-2.exotic.company/operator/payout_transaction*'
-      ];
-      let found = false;
-      for (const url of urls) {
-        const tabs = await api.tabs.query({ url });
-        if (tabs.length > 0) {
-          found = true;
-          break;
-        }
-      }
-      this.state.targetActive = found;
-      this.updateTargetInfo();
-    } catch (error) {
-      this.state.targetActive = false;
-    }
-  }
-
-  addActivity(text, type = 'info') {
-    const now = new Date();
-    const time = now.toLocaleTimeString('ru-RU', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-    
-    this.state.activity.unshift({
-      text: text,
-      time: time,
-      type: type,
-      timestamp: now.getTime()
-    });
-    
-    if (this.state.activity.length > 10) {
-      this.state.activity = this.state.activity.slice(0, 10);
-    }
-    
-    this.updateActivity();
-  }
-
-  getActivityIcon(type) {
-    const icons = {
-      'click': '🖱️',
-      'system': '⚙️',
-      'error': '⚠️',
-      'success': '✅',
-      'info': 'ℹ️'
-    };
-    
-    return icons[type] || '📝';
-  }
-
-  startAutoRefresh() {
-    this._autoRefreshInterval = setInterval(async () => {
-      await this.loadState();
-      this.updateUI();
-      await this.checkTargetTab();
-    }, 3000);
-    window.addEventListener('unload', () => clearInterval(this._autoRefreshInterval), { once: true });
+  formatNumber(num) {
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'k';
+    return String(num);
   }
 
   async sendMessage(message) {
     return new Promise((resolve) => {
-      api.runtime.sendMessage(message, (response) => {
-        if (api.runtime.lastError) {
-          console.log('Ошибка отправки сообщения:', api.runtime.lastError);
-          resolve(null);
-        } else {
-          resolve(response);
-        }
-      });
+      try {
+        api.runtime.sendMessage(message, (response) => {
+          if (api.runtime.lastError) {
+            console.log('Message error:', api.runtime.lastError.message);
+            resolve({});
+            return;
+          }
+          resolve(response || {});
+        });
+      } catch (e) {
+        console.log('SendMessage error:', e);
+        resolve({});
+      }
     });
-  }
-
-  formatNumber(num) {
-    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-    if (num >= 1000) return (num / 1000).toFixed(1) + 'k';
-    return num.toString();
-  }
-
-  updateLicenseInfo() {
-    const infoLine = document.getElementById('licenseInfoLine');
-    const iconEl = document.getElementById('licenseIconSmall');
-    const textEl = document.getElementById('licenseTextSmall');
-    const daysEl = document.getElementById('licenseDaysSmall');
-
-    if (!infoLine) return;
-
-    const license = this.state.license;
-
-    // Если нет данных о лицензии или не подключен
-    if (!license || license.error === 'NOT_CONNECTED') {
-      infoLine.style.display = 'flex';
-      infoLine.className = 'license-info-line expired';
-      iconEl.textContent = '🔗';
-      textEl.textContent = 'Подключите Telegram';
-      daysEl.textContent = '→ Настройки';
-      daysEl.className = 'license-days-small';
-      return;
-    }
-
-    infoLine.style.display = 'flex';
-
-    const isValid = license.valid === true;
-    const isTrial = license.type === 'trial';
-    const daysLeft = license.daysLeft || 0;
-
-    if (isValid) {
-      if (isTrial) {
-        iconEl.textContent = '🎁';
-        textEl.textContent = 'Пробный период';
-        infoLine.className = 'license-info-line warning';
-      } else {
-        iconEl.textContent = '⭐';
-        textEl.textContent = 'Подписка активна';
-        infoLine.className = 'license-info-line active';
-      }
-
-      if (daysLeft <= 1) {
-        daysEl.textContent = '< 1 дн.';
-        daysEl.className = 'license-days-small danger';
-      } else if (daysLeft <= 3) {
-        daysEl.textContent = `${daysLeft} дн.`;
-        daysEl.className = 'license-days-small warning';
-      } else {
-        daysEl.textContent = `${daysLeft} дн.`;
-        daysEl.className = 'license-days-small success';
-      }
-    } else {
-      iconEl.textContent = '❌';
-      textEl.textContent = 'Лицензия истекла';
-      daysEl.textContent = 'Продлить';
-      daysEl.className = 'license-days-small danger';
-      infoLine.className = 'license-info-line expired';
-    }
   }
 }
 
-new PopupController();
+document.addEventListener('DOMContentLoaded', () => new PopupController());

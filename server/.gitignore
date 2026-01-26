@@ -1,0 +1,24 @@
+# Секреты и конфиденциальные данные
+SECRETS.txt
+*.secret
+.env
+.env.local
+.dev.vars
+
+# Логи Wrangler
+*.log
+
+# Node modules
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.bak
+*~
