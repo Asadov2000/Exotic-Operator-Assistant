@@ -1233,6 +1233,125 @@ async function handleStatus(request, env) {
   }
 }
 
+// ========== REAL-TIME ПОДКЛЮЧЕНИЕ (SSE) ==========
+// Server-Sent Events для мгновенного оповещения о подключении Telegram
+// Расширение подключается к этому endpoint и ждёт события connected
+async function handleConnectionStream(request, env) {
+  const url = new URL(request.url);
+  const code = url.searchParams.get('code');
+  const oderId = url.searchParams.get('oderId');
+  
+  if (!code || !oderId) {
+    return new Response('Missing code or oderId', { status: 400 });
+  }
+  
+  // Валидация
+  if (!isValidBindCode(code) || !isValidOderId(oderId)) {
+    return new Response('Invalid parameters', { status: 400 });
+  }
+  
+  // Rate limiting
+  const clientIP = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const rateLimit = await checkRateLimit(env, `stream:${clientIP}`, 10); // 10 потоков в минуту
+  if (!rateLimit.allowed) {
+    return new Response('Rate limited', { status: 429 });
+  }
+  
+  // Создаём ReadableStream для SSE
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  const encoder = new TextEncoder();
+  
+  // Отправляем ping каждые 15 секунд чтобы соединение не закрылось
+  // и проверяем статус подключения
+  let checkCount = 0;
+  const maxChecks = 120; // 30 минут максимум (120 * 15 сек)
+  
+  const checkConnection = async () => {
+    checkCount++;
+    
+    try {
+      // Проверяем, подключился ли пользователь
+      const userData = await env.USERS.get(`user:${oderId}`);
+      
+      if (userData) {
+        const user = JSON.parse(userData);
+        
+        // Получаем данные лицензии
+        const result = await getLicenseData(env, oderId);
+        
+        // Отправляем событие connected
+        const eventData = JSON.stringify({
+          event: 'connected',
+          username: user.username,
+          telegramId: user.telegramId,
+          license: result.license ? {
+            valid: result.license.expiresAt > Date.now(),
+            type: result.license.type,
+            expiresAt: result.license.expiresAt
+          } : null
+        });
+        
+        await writer.write(encoder.encode(`event: connected\ndata: ${eventData}\n\n`));
+        await writer.close();
+        return true; // Подключение найдено, закрываем поток
+      }
+      
+      // Отправляем ping (keep-alive)
+      await writer.write(encoder.encode(`: ping ${Date.now()}\n\n`));
+      
+      // Продолжаем проверять если не превысили лимит
+      if (checkCount < maxChecks) {
+        return false;
+      } else {
+        // Время истекло
+        await writer.write(encoder.encode(`event: timeout\ndata: {"error":"timeout"}\n\n`));
+        await writer.close();
+        return true;
+      }
+    } catch (error) {
+      console.error('SSE check error:', error);
+      try {
+        await writer.write(encoder.encode(`event: error\ndata: {"error":"${error.message}"}\n\n`));
+        await writer.close();
+      } catch (e) {}
+      return true;
+    }
+  };
+  
+  // Запускаем проверку с помощью алармов Cloudflare Workers
+  // Первая проверка сразу, затем каждые 500мс первые 20 раз, потом каждые 2 сек
+  const runChecks = async () => {
+    // Быстрые проверки первые 10 секунд (каждые 500мс)
+    for (let i = 0; i < 20; i++) {
+      if (await checkConnection()) return;
+      await new Promise(r => setTimeout(r, 500));
+    }
+    
+    // Затем каждые 2 секунды
+    for (let i = 0; i < maxChecks - 20; i++) {
+      if (await checkConnection()) return;
+      await new Promise(r => setTimeout(r, 2000));
+    }
+  };
+  
+  // Запускаем проверки в фоне (не блокируя ответ)
+  // @ts-ignore - ctx.waitUntil доступен в Cloudflare Workers
+  runChecks();
+  
+  // Возвращаем SSE ответ
+  return new Response(readable, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET',
+      'X-Accel-Buffering': 'no'
+    }
+  });
+}
+
 // Эндпоинт для привязки Telegram (вызывается ботом)
 async function handleTelegramConnect(request, env) {
   try {
@@ -6476,6 +6595,12 @@ export default {
       }
       if (path === '/api/notify' && request.method === 'POST') {
         return await handleNotify(request, env);
+      }
+      
+      // ========== REAL-TIME ПОДКЛЮЧЕНИЕ (SSE) ==========
+      // Server-Sent Events для мгновенного оповещения о подключении Telegram
+      if (path === '/api/connect/stream' && request.method === 'GET') {
+        return await handleConnectionStream(request, env);
       }
       
       // Telegram бот эндпоинты  

@@ -7,16 +7,18 @@ const api = globalThis.browser ?? chrome;
 const SERVER_URL = 'https://exotic-telegram.mabastik.workers.dev';
 
 // ========== КОНСТАНТЫ ==========
-const CONNECTION_CHECK_INTERVAL = 2000; // 2 секунды (было 5)
+const CONNECTION_CHECK_INTERVAL = 2000; // 2 секунды для fallback polling
 const CONNECTION_CHECK_FAST = 500; // Быстрая проверка для первых попыток
 const MAX_CONNECTION_ATTEMPTS = 90; // 3 минуты (2с * 90)
 const COPY_HINT_DURATION = 2000; // 2 секунды
-const REQUEST_TIMEOUT = 5000; // 5 секунд (было 10)
+const REQUEST_TIMEOUT = 5000; // 5 секунд
 const STATUS_CACHE_TTL = 60000; // Кэш статуса 1 минуту
+const SSE_SUPPORTED = typeof EventSource !== 'undefined'; // Проверка поддержки SSE
 
 class OptionsController {
     constructor() {
         this.deviceId = null;
+        this.eventSource = null; // SSE соединение
         this.init();
     }
 
@@ -399,18 +401,19 @@ class OptionsController {
             newCodeBtn.disabled = false;
             newCodeBtn.textContent = '🔄';
             
-            // Сохраняем oderId для проверки статуса
+            // Сохраняем oderId и код для проверки статуса
+            this.currentCode = data.code; // Сохраняем код для SSE
             await this.sendMessage({
                 action: 'updateSettings',
                 settings: { telegramUserId: oderId, deviceId: this.deviceId }
             });
             
             btn.textContent = '✓ Код получен';
-            statusEl.textContent = '⏳ Ожидание подключения...';
+            statusEl.textContent = '⚡ Ожидание подключения...';
             statusEl.style.color = 'var(--warning)';
             
-            // Начинаем проверку подключения
-            this.startConnectionCheck(oderId);
+            // Начинаем проверку подключения (с SSE если поддерживается)
+            this.startConnectionCheck(oderId, data.code);
             
         } catch (error) {
             console.error('Ошибка генерации кода:', error);
@@ -424,21 +427,101 @@ class OptionsController {
         }
     }
 
-    startConnectionCheck(oderId) {
-        let attempts = 0;
-        const maxAttempts = MAX_CONNECTION_ATTEMPTS;
+    // ========== REAL-TIME ПОДКЛЮЧЕНИЕ (SSE) ==========
+    // Использует Server-Sent Events для мгновенного оповещения
+    startConnectionCheck(oderId, code) {
         const statusEl = document.getElementById('connectionStatus');
         
-        // Останавливаем предыдущую проверку если есть
-        if (this.checkInterval) {
-            clearTimeout(this.checkInterval);
+        // Останавливаем предыдущие проверки
+        this.stopConnectionCheck();
+        
+        // Пробуем SSE если поддерживается
+        if (SSE_SUPPORTED && code) {
+            console.log('[Exotic] Используем SSE для подключения');
+            this.startSSEConnection(oderId, code, statusEl);
+        } else {
+            console.log('[Exotic] SSE недоступен, используем polling');
+            this.startPollingConnection(oderId, statusEl);
         }
+    }
+    
+    // SSE соединение - мгновенное оповещение
+    startSSEConnection(oderId, code, statusEl) {
+        const sseUrl = `${SERVER_URL}/api/connect/stream?code=${encodeURIComponent(code)}&oderId=${encodeURIComponent(oderId)}`;
+        
+        statusEl.textContent = '⚡ Ожидание подключения...';
+        statusEl.style.color = 'var(--warning)';
+        
+        this.eventSource = new EventSource(sseUrl);
+        
+        // Событие успешного подключения
+        this.eventSource.addEventListener('connected', async (event) => {
+            console.log('[Exotic] SSE: connected event received');
+            
+            try {
+                const data = JSON.parse(event.data);
+                
+                // Сохраняем данные подключения
+                await this.sendMessage({
+                    action: 'updateSettings',
+                    settings: {
+                        telegramConnected: true,
+                        telegramUserId: oderId,
+                        telegramUsername: data.username,
+                        lastStatusCheck: Date.now()
+                    }
+                });
+                
+                statusEl.textContent = '✅ Подключено мгновенно!';
+                statusEl.style.color = 'var(--success)';
+                
+                this.showConnected(data.username || data.telegramId);
+                await this.loadLicense();
+                this.resetCodeUI();
+                
+            } catch (error) {
+                console.error('[Exotic] SSE parse error:', error);
+            }
+            
+            this.stopConnectionCheck();
+        });
+        
+        // Таймаут
+        this.eventSource.addEventListener('timeout', () => {
+            console.log('[Exotic] SSE: timeout');
+            statusEl.textContent = '❌ Время истекло. Получите новый код.';
+            statusEl.style.color = 'var(--danger)';
+            this.resetCodeUI();
+            this.stopConnectionCheck();
+        });
+        
+        // Ошибка SSE - переключаемся на polling
+        this.eventSource.onerror = (error) => {
+            console.log('[Exotic] SSE error, switching to polling:', error);
+            this.stopConnectionCheck();
+            this.startPollingConnection(oderId, statusEl);
+        };
+        
+        // Таймаут для SSE - если за 30 сек нет ответа, переключаемся на polling
+        this.sseTimeout = setTimeout(() => {
+            if (this.eventSource && this.eventSource.readyState !== EventSource.CLOSED) {
+                console.log('[Exotic] SSE timeout, switching to polling');
+                this.stopConnectionCheck();
+                this.startPollingConnection(oderId, statusEl);
+            }
+        }, 30000);
+    }
+    
+    // Fallback: polling (старый метод)
+    startPollingConnection(oderId, statusEl) {
+        let attempts = 0;
+        const maxAttempts = MAX_CONNECTION_ATTEMPTS;
         
         const check = async () => {
             attempts++;
             
-            // ОПТИМИЗАЦИЯ: Первые 10 проверок быстрее (500мс), потом 2с
-            const isEarlyCheck = attempts <= 10;
+            // Первые 20 проверок быстрее (500мс), потом 2с
+            const isEarlyCheck = attempts <= 20;
             const interval = isEarlyCheck ? CONNECTION_CHECK_FAST : CONNECTION_CHECK_INTERVAL;
             
             try {
@@ -456,7 +539,7 @@ class OptionsController {
                 const data = await response.json();
                 
                 if (data.connected) {
-                    // Сохраняем данные подключения через background.js
+                    // Сохраняем данные подключения
                     await this.sendMessage({
                         action: 'updateSettings',
                         settings: {
@@ -472,7 +555,6 @@ class OptionsController {
                     
                     this.showConnected(data.username || data.telegramId);
                     await this.loadLicense();
-                    
                     this.resetCodeUI();
                     return;
                 }
@@ -486,7 +568,6 @@ class OptionsController {
                 }
                 
             } catch (error) {
-                // Не показываем ошибку на ранних проверках
                 if (!isEarlyCheck) {
                     console.error('Ошибка проверки:', error);
                     statusEl.textContent = '⚠️ Повтор проверки...';
@@ -503,8 +584,24 @@ class OptionsController {
             }
         };
         
-        // ОПТИМИЗАЦИЯ: Первая проверка почти сразу (300мс)
-        this.checkInterval = setTimeout(check, 300);
+        // Первая проверка сразу
+        this.checkInterval = setTimeout(check, 100);
+    }
+    
+    // Остановка всех проверок
+    stopConnectionCheck() {
+        if (this.eventSource) {
+            this.eventSource.close();
+            this.eventSource = null;
+        }
+        if (this.checkInterval) {
+            clearTimeout(this.checkInterval);
+            this.checkInterval = null;
+        }
+        if (this.sseTimeout) {
+            clearTimeout(this.sseTimeout);
+            this.sseTimeout = null;
+        }
     }
 
     resetCodeUI() {
@@ -514,14 +611,12 @@ class OptionsController {
         document.getElementById('connectCode').textContent = '--------';
         document.getElementById('connectCode').classList.remove('active');
         document.getElementById('openBotBtn').style.display = 'none';
+        this.currentCode = null; // Очищаем сохранённый код
     }
 
     async disconnectTelegram() {
-        // Останавливаем проверку подключения
-        if (this.checkInterval) {
-            clearTimeout(this.checkInterval);
-            this.checkInterval = null;
-        }
+        // Останавливаем все проверки подключения (включая SSE)
+        this.stopConnectionCheck();
         
         // Очищаем настройки через background.js
         await this.sendMessage({
