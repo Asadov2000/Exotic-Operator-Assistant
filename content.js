@@ -693,6 +693,17 @@ class ExoticAutoclicker {
       }
       
       const audioContext = new AudioContextClass();
+      
+      // Мобильные браузеры требуют возобновления AudioContext после жеста
+      if (audioContext.state === 'suspended') {
+        audioContext.resume().catch(() => {});
+        // Если не удалось возобновить - выходим без ошибки
+        if (audioContext.state === 'suspended') {
+          console.log('[Exotic] AudioContext suspended, sound skipped');
+          return;
+        }
+      }
+      
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
       
@@ -1573,12 +1584,27 @@ class ExoticAutoclicker {
     }
     if (permission !== 'granted') return;
     try {
-      new Notification(title, {
-        body: message,
-        icon: api.runtime?.getURL ? api.runtime.getURL('icons/icon128.png') : undefined
-      });
+      // Для Service Worker (мобильные браузеры)
+      if (navigator.serviceWorker?.ready) {
+        const registration = await navigator.serviceWorker.ready;
+        if (registration.showNotification) {
+          await registration.showNotification(title, {
+            body: message,
+            icon: api.runtime?.getURL ? api.runtime.getURL('icons/icon128.png') : undefined
+          });
+          return;
+        }
+      }
+      // Fallback для десктопа
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        new Notification(title, {
+          body: message,
+          icon: api.runtime?.getURL ? api.runtime.getURL('icons/icon128.png') : undefined
+        });
+      }
     } catch (error) {
-      console.error('Notification error:', error);
+      // Игнорируем ошибки уведомлений - не критично
+      console.warn('Notification not available:', error.message);
     }
   }
   

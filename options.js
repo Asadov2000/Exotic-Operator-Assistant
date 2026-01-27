@@ -26,7 +26,8 @@ const MAX_CONNECTION_ATTEMPTS = 90; // 3 минуты (2с * 90)
 const COPY_HINT_DURATION = 2000; // 2 секунды
 const REQUEST_TIMEOUT = 5000; // 5 секунд
 const STATUS_CACHE_TTL = 60000; // Кэш статуса 1 минуту
-const SSE_SUPPORTED = typeof EventSource !== 'undefined'; // Проверка поддержки SSE
+// SSE отключен - Cloudflare Workers не поддерживают SSE
+const SSE_SUPPORTED = false;
 
 class OptionsController {
     constructor() {

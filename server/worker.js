@@ -2548,14 +2548,18 @@ async function handleStatusCheck(request, env) {
       firstName: user.firstName || null,
       connectedAt: user.connectedAt,
       license: hasActiveLicense ? {
+        valid: true,
         type: license.type,
+        typeName: LICENSE_TYPES[license.type]?.name || license.type,
         expiresAt: license.expiresAt,
         daysLeft: Math.ceil((license.expiresAt - Date.now()) / (24 * 60 * 60 * 1000))
-      } : null,
+      } : { valid: false },
       settings: {
         notifyDestination: settings.notifyDestination || 'dm',
-        soundEnabled: settings.soundEnabled !== false
-      }
+        soundEnabled: settings.soundEnabled !== false,
+        clicks: settings.clickNotifications !== false
+      },
+      version: license?.updatedAt || license?.grantedAt || Date.now()
     });
 
   } catch (error) {
@@ -2564,6 +2568,85 @@ async function handleStatusCheck(request, env) {
       connected: false, 
       error: 'SERVER_ERROR' 
     }, 500);
+  }
+}
+
+// ==================== LICENSE VERSION (быстрая проверка) ====================
+async function handleLicenseVersion(request, env) {
+  try {
+    const clientIP = getClientIP(request);
+    
+    // Rate limit
+    const ipCheck = checkRateLimit(clientIP, 'api');
+    if (!ipCheck.allowed) {
+      return jsonResponse({ error: 'Rate limit exceeded', retryAfter: ipCheck.resetIn }, 429);
+    }
+    
+    const { oderId } = await request.json();
+
+    if (!oderId) {
+      return jsonResponse({ connected: false, error: 'oderId required' }, 400);
+    }
+
+    const user = await getUser(env, oderId);
+    if (!user) {
+      return jsonResponse({ connected: false });
+    }
+
+    const license = await getLicense(env, user.telegramId);
+    
+    // Версия = timestamp последнего изменения лицензии
+    // Если лицензия изменилась - версия будет другой
+    const version = license?.updatedAt || license?.grantedAt || 0;
+
+    return jsonResponse({
+      connected: true,
+      version,
+      hasLicense: !!(license && license.expiresAt > Date.now())
+    });
+
+  } catch (error) {
+    console.error('License version error:', error);
+    return jsonResponse({ connected: false, error: 'SERVER_ERROR' }, 500);
+  }
+}
+
+// ==================== SETTINGS SYNC ====================
+async function handleSettingsSync(request, env) {
+  try {
+    const clientIP = getClientIP(request);
+    
+    // Rate limit
+    const ipCheck = checkRateLimit(clientIP, 'api');
+    if (!ipCheck.allowed) {
+      return jsonResponse({ error: 'Rate limit exceeded', retryAfter: ipCheck.resetIn }, 429);
+    }
+    
+    const { oderId, settings } = await request.json();
+
+    if (!oderId) {
+      return jsonResponse({ ok: false, error: 'oderId required' }, 400);
+    }
+
+    const user = await getUser(env, oderId);
+    if (!user) {
+      return jsonResponse({ ok: false, error: 'NOT_CONNECTED' }, 404);
+    }
+
+    // Сохраняем информацию о расширении
+    const existingSettings = await getSettings(env, user.telegramId);
+    
+    if (settings) {
+      existingSettings.extensionVersion = settings.extensionVersion;
+      existingSettings.lastExtensionSync = Date.now();
+      await saveSettings(env, user.telegramId, existingSettings);
+    }
+
+    return jsonResponse({ ok: true });
+
+  } catch (error) {
+    console.error('Settings sync error:', error);
+    return jsonResponse({ ok: false, error: 'SERVER_ERROR' }, 500);
   }
 }
 
@@ -2876,6 +2959,21 @@ export default {
       // Проверка статуса подключения
       if (path === '/api/status' && request.method === 'POST') {
         return await handleStatusCheck(request, env);
+      }
+      
+      // Алиас для совместимости с расширением
+      if (path === '/api/sync/status' && request.method === 'POST') {
+        return await handleStatusCheck(request, env);
+      }
+      
+      // Быстрая проверка версии лицензии
+      if (path === '/api/license/version' && request.method === 'POST') {
+        return await handleLicenseVersion(request, env);
+      }
+      
+      // Синхронизация настроек из расширения
+      if (path === '/api/settings/sync' && request.method === 'POST') {
+        return await handleSettingsSync(request, env);
       }
 
       // API устройств

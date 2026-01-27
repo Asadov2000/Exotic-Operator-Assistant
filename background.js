@@ -63,7 +63,9 @@ async function fetchWithRetry(url, options = {}, attempt = 1) {
     }
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000); // Уменьшили с 10с до 5с
+    const timeoutId = setTimeout(() => {
+      controller.abort(new Error('Request timeout'));
+    }, 5000);
     
     const response = await fetch(url, {
       ...options,
@@ -235,8 +237,14 @@ class BackgroundService {
       
       return { synced: false, reason: 'NOT_FOUND' };
     } catch (error) {
-      console.error('Sync error:', error.message);
-      return { synced: false, reason: error.message };
+      // Сетевые ошибки не критичны для sync
+      const msg = error?.message || 'Unknown error';
+      if (msg.includes('fetch') || msg.includes('timeout') || msg.includes('abort') || msg.includes('network')) {
+        console.warn('Sync: network unavailable');
+      } else {
+        console.warn('Sync error:', msg);
+      }
+      return { synced: false, reason: msg };
     }
   }
 
@@ -335,7 +343,13 @@ class BackgroundService {
       this.scheduleSave();
       return data.valid;
     } catch (error) {
-      console.error('License check error:', error.message);
+      // Сетевая ошибка - не критично, сохраняем текущий статус
+      const msg = error?.message || 'Unknown error';
+      if (msg.includes('fetch') || msg.includes('timeout') || msg.includes('abort') || msg.includes('network')) {
+        console.warn('License check: network unavailable, keeping current status');
+      } else {
+        console.warn('License check error:', msg);
+      }
       // Не сбрасываем статус лицензии при сетевой ошибке
       return this.state.license.valid;
     }
