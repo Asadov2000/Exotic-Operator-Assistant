@@ -1,4 +1,19 @@
-const api = typeof browser !== 'undefined' ? browser : (typeof chrome !== 'undefined' ? chrome : null);
+// Безопасное определение API для всех браузеров
+// PC/Mac: Chrome, Firefox, Edge, Opera, Brave, Arc
+// Android: Kiwi, Mises, Samsung Internet, Firefox
+// iPhone/iPad: Orion Browser (единственный с поддержкой Chrome-расширений)
+var api = null;
+try {
+  // Firefox/Orion используют 'browser', Chrome-based - 'chrome'
+  if (typeof browser !== 'undefined' && browser && browser.runtime) {
+    api = browser;
+  } else if (typeof chrome !== 'undefined' && chrome && chrome.runtime) {
+    api = chrome;
+  }
+} catch (e) {
+  // Fallback для старых браузеров
+  if (typeof chrome !== 'undefined') api = chrome;
+}
 
 // === КОНФИГУРАЦИЯ ===
 const DEBUG = false;
@@ -38,7 +53,8 @@ class ExoticAutoclicker {
     this.state = {
       enabled: false,
       running: false,
-      clickedElements: new WeakSet(),
+      // WeakSet может не поддерживаться на старых мобильных браузерах
+      clickedElements: typeof WeakSet !== 'undefined' ? new WeakSet() : new Set(),
       clickedIds: new Set(),
       observer: null,
       monitorId: null,
@@ -128,8 +144,8 @@ class ExoticAutoclicker {
   startRateCalculator() {
     // Создаём плавающий элемент для отображения курса
     this.createRateDisplay();
-    // Проверяем каждые 500мс (сохраняем ID для возможной очистки)
-    this.rateCalculatorId = setInterval(() => this.calculateAndShowRate(), 500);
+    // Проверяем каждые 1000мс (оптимизировано для снижения нагрузки)
+    this.rateCalculatorId = setInterval(() => this.calculateAndShowRate(), 1000);
     logAlways('💱 Калькулятор курса запущен');
   }
   
@@ -144,25 +160,204 @@ class ExoticAutoclicker {
       position: fixed;
       top: 80px;
       right: 20px;
-      z-index: 999999;
-      padding: 12px 16px;
+      z-index: 2147483647;
+      padding: 14px 16px;
       background: linear-gradient(135deg, #c0392b 0%, #922b21 100%);
       color: white;
-      border-radius: 12px;
+      border-radius: 14px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       font-size: 14px;
-      box-shadow: 0 4px 20px rgba(192, 57, 43, 0.4);
+      box-shadow: 0 4px 24px rgba(192, 57, 43, 0.5);
       display: none;
-      min-width: 180px;
-      border: 1px solid rgba(255,255,255,0.2);
+      min-width: 200px;
+      max-width: 280px;
+      border: 1px solid rgba(255,255,255,0.15);
+      backdrop-filter: blur(10px);
+      pointer-events: auto;
     `;
     display.innerHTML = `
-      <div style="font-size: 11px; opacity: 0.9; margin-bottom: 6px;">📊 Себестоимость</div>
-      <div id="exotic-rate-value" style="font-size: 22px; font-weight: 700;">—</div>
-      <div id="exotic-rate-details" style="font-size: 10px; opacity: 0.8; margin-top: 6px;"></div>
+      <div style="font-size: 11px; opacity: 0.9; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+        <span>📊 Себестоимость</span>
+        <span id="exotic-toggle-calc" style="cursor: pointer; font-size: 13px; opacity: 0.8; margin-left: auto;" title="Калькулятор прибыли">⚙️</span>
+      </div>
+      <div id="exotic-rate-value" style="font-size: 24px; font-weight: 700; letter-spacing: -0.5px;">—</div>
+      <div id="exotic-rate-details" style="font-size: 10px; opacity: 0.75; margin-top: 4px;"></div>
+      
+      <!-- Калькулятор прибыли (скрыт по умолчанию) -->
+      <div id="exotic-profit-calc" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.2);">
+        <div style="font-size: 11px; opacity: 0.9; margin-bottom: 8px;">💰 Калькулятор прибыли</div>
+        
+        <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+          <div style="flex: 1;">
+            <label style="font-size: 9px; opacity: 0.7; display: block; margin-bottom: 3px;">Курс продажи ₽</label>
+            <div id="exotic-sell-rate" style="
+              width: 100%;
+              padding: 8px 10px;
+              border: none;
+              border-radius: 8px;
+              background: rgba(255,255,255,0.15);
+              color: white;
+              font-size: 14px;
+              font-weight: 600;
+              box-sizing: border-box;
+              cursor: pointer;
+              min-height: 20px;
+              user-select: none;
+            " title="Нажмите чтобы ввести">—</div>
+          </div>
+          <div style="flex: 1;">
+            <label style="font-size: 9px; opacity: 0.7; display: block; margin-bottom: 3px;">Комиссия %</label>
+            <div id="exotic-commission" style="
+              width: 100%;
+              padding: 8px 10px;
+              border: none;
+              border-radius: 8px;
+              background: rgba(255,255,255,0.15);
+              color: white;
+              font-size: 14px;
+              font-weight: 600;
+              box-sizing: border-box;
+              cursor: pointer;
+              min-height: 20px;
+              user-select: none;
+            " title="Нажмите чтобы ввести">1</div>
+          </div>
+        </div>
+        
+        <div id="exotic-profit-result" style="
+          background: rgba(0,0,0,0.2);
+          border-radius: 10px;
+          padding: 10px 12px;
+          margin-top: 8px;
+        ">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-size: 10px; opacity: 0.8;">Выручка:</span>
+            <span id="exotic-revenue" style="font-size: 13px; font-weight: 600;">— ₽</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-size: 10px; opacity: 0.8;">Комиссия:</span>
+            <span id="exotic-commission-amount" style="font-size: 13px; font-weight: 600; color: #ff9999;">— ₽</span>
+          </div>
+          <div style="height: 1px; background: rgba(255,255,255,0.2); margin: 8px 0;"></div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 11px; font-weight: 600;">Чистая прибыль:</span>
+            <span id="exotic-net-profit" style="font-size: 18px; font-weight: 700; color: #7dff7d;">— ₽</span>
+          </div>
+          <div id="exotic-profit-percent" style="font-size: 10px; opacity: 0.8; text-align: right; margin-top: 2px;"></div>
+        </div>
+      </div>
     `;
     document.body.appendChild(display);
     this.rateDisplay = display;
+    
+    // Сохраняем текущие значения для калькулятора
+    this.currentSumUsdt = 0;
+    this.currentSumRub = 0;
+    
+    // Обработчик кнопки toggle
+    const toggleBtn = document.getElementById('exotic-toggle-calc');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', () => {
+        const calc = document.getElementById('exotic-profit-calc');
+        const sellRateEl = document.getElementById('exotic-sell-rate');
+        if (calc) {
+          const isHidden = calc.style.display === 'none';
+          calc.style.display = isHidden ? 'block' : 'none';
+          toggleBtn.textContent = isHidden ? '✖️' : '⚙️';
+          if (isHidden) {
+            this.calculateProfit();
+          } else {
+            // При сворачивании сбрасываем курс продажи
+            this.sellRateValue = 0;
+            if (sellRateEl) sellRateEl.textContent = '—';
+          }
+        }
+      });
+    }
+    
+    // Обработчики ввода через prompt()
+    const sellRateEl = document.getElementById('exotic-sell-rate');
+    const commissionEl = document.getElementById('exotic-commission');
+    
+    // Сохраняем значения
+    this.sellRateValue = 0;
+    this.commissionValue = parseFloat(localStorage.getItem('exotic_commission')) || 1;
+    
+    // Отображаем сохранённую комиссию
+    if (commissionEl) {
+      commissionEl.textContent = this.commissionValue || '1';
+    }
+    
+    // Клик на курс продажи
+    if (sellRateEl) {
+      sellRateEl.addEventListener('click', () => {
+        const current = this.sellRateValue || '';
+        const input = prompt('Введите курс продажи ₽:', current);
+        if (input !== null) {
+          const val = parseFloat(input.replace(',', '.')) || 0;
+          this.sellRateValue = val;
+          sellRateEl.textContent = val > 0 ? val : '—';
+          this.calculateProfit();
+        }
+      });
+    }
+    
+    // Клик на комиссию
+    if (commissionEl) {
+      commissionEl.addEventListener('click', () => {
+        const current = this.commissionValue || '';
+        const input = prompt('Введите комиссию %:', current);
+        if (input !== null) {
+          const val = parseFloat(input.replace(',', '.')) || 0;
+          this.commissionValue = val;
+          commissionEl.textContent = val > 0 ? val : '0';
+          localStorage.setItem('exotic_commission', val);
+          this.calculateProfit();
+        }
+      });
+    }
+  }
+  
+  calculateProfit() {
+    const revenueEl = document.getElementById('exotic-revenue');
+    const commissionAmountEl = document.getElementById('exotic-commission-amount');
+    const netProfitEl = document.getElementById('exotic-net-profit');
+    const profitPercentEl = document.getElementById('exotic-profit-percent');
+    
+    if (!this.currentSumUsdt) return;
+    
+    const sellRate = this.sellRateValue || 0;
+    const commissionPercent = this.commissionValue || 0;
+    
+    if (sellRate <= 0) {
+      if (revenueEl) revenueEl.textContent = '— ₽';
+      if (commissionAmountEl) commissionAmountEl.textContent = '— ₽';
+      if (netProfitEl) netProfitEl.textContent = '— ₽';
+      if (profitPercentEl) profitPercentEl.textContent = '';
+      return;
+    }
+    
+    // Расчёты
+    const revenue = this.currentSumUsdt * sellRate;
+    const commissionAmount = revenue * (commissionPercent / 100);
+    const netProfit = revenue - commissionAmount - this.currentSumRub;
+    const profitPercent = this.currentSumRub > 0 ? ((netProfit / this.currentSumRub) * 100) : 0;
+    
+    // Отображаем
+    if (revenueEl) revenueEl.textContent = `${revenue.toLocaleString('ru-RU', {maximumFractionDigits: 2})} ₽`;
+    if (commissionAmountEl) commissionAmountEl.textContent = `-${commissionAmount.toLocaleString('ru-RU', {maximumFractionDigits: 2})} ₽`;
+    
+    if (netProfitEl) {
+      const isPositive = netProfit >= 0;
+      netProfitEl.textContent = `${isPositive ? '+' : ''}${netProfit.toLocaleString('ru-RU', {maximumFractionDigits: 2})} ₽`;
+      netProfitEl.style.color = isPositive ? '#7dff7d' : '#ff7d7d';
+    }
+    
+    if (profitPercentEl) {
+      const isPositive = profitPercent >= 0;
+      profitPercentEl.textContent = `${isPositive ? '+' : ''}${profitPercent.toFixed(2)}% от себестоимости`;
+      profitPercentEl.style.color = isPositive ? 'rgba(125, 255, 125, 0.8)' : 'rgba(255, 125, 125, 0.8)';
+    }
   }
   
   calculateAndShowRate() {
@@ -225,6 +420,10 @@ class ExoticAutoclicker {
   showRateDisplay(rate, sumRub, sumUsdt) {
     if (!this.rateDisplay) this.createRateDisplay();
     
+    // Сохраняем значения для калькулятора
+    this.currentSumRub = sumRub;
+    this.currentSumUsdt = sumUsdt;
+    
     const valueEl = document.getElementById('exotic-rate-value');
     const detailsEl = document.getElementById('exotic-rate-details');
     
@@ -236,11 +435,27 @@ class ExoticAutoclicker {
     }
     
     this.rateDisplay.style.display = 'block';
+    
+    // Обновляем калькулятор если он открыт
+    const calcVisible = document.getElementById('exotic-profit-calc');
+    if (calcVisible && calcVisible.style.display !== 'none') {
+      this.calculateProfit();
+    }
   }
   
   hideRateDisplay() {
     if (this.rateDisplay) {
       this.rateDisplay.style.display = 'none';
+      
+      // Сбрасываем курс продажи и закрываем калькулятор
+      this.sellRateValue = 0;
+      const sellRateEl = document.getElementById('exotic-sell-rate');
+      if (sellRateEl) sellRateEl.textContent = '—';
+      
+      const calc = document.getElementById('exotic-profit-calc');
+      const toggleBtn = document.getElementById('exotic-toggle-calc');
+      if (calc) calc.style.display = 'none';
+      if (toggleBtn) toggleBtn.textContent = '⚙️';
     }
   }
   
@@ -470,7 +685,14 @@ class ExoticAutoclicker {
   
   playSound(type = 'click', volume = 0.5) {
     try {
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      // Проверка поддержки AudioContext (может отсутствовать на мобильных)
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) {
+        console.log('[Exotic] AudioContext not supported');
+        return;
+      }
+      
+      const audioContext = new AudioContextClass();
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
       
@@ -1308,24 +1530,30 @@ class ExoticAutoclicker {
 
   async sendMessage(message) {
     return new Promise((resolve) => {
-      if (!api.runtime?.id) {
+      // Проверяем доступность API (может быть null на мобильных)
+      if (!api || !api.runtime || !api.runtime.id) {
         resolve(null);
         return;
       }
 
-      api.runtime.sendMessage(message, (response) => {
-        const err = api.runtime.lastError;
-        if (err) {
-          const msg = String(err.message || '').toLowerCase();
-          if (msg.includes('context invalidated') || msg.includes('receiving end')) {
-            // Extension context is gone (reload/disabled) — stop work silently
-            this.state.enabled = false;
+      try {
+        api.runtime.sendMessage(message, (response) => {
+          const err = api.runtime?.lastError;
+          if (err) {
+            const msg = String(err.message || '').toLowerCase();
+            if (msg.includes('context invalidated') || msg.includes('receiving end')) {
+              // Extension context is gone (reload/disabled) — stop work silently
+              this.state.enabled = false;
+            }
+            resolve(null);
+          } else {
+            resolve(response);
           }
-          resolve(null);
-        } else {
-          resolve(response);
-        }
-      });
+        });
+      } catch (e) {
+        console.log('[Exotic] sendMessage error:', e.message);
+        resolve(null);
+      }
     });
   }
 

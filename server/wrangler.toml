@@ -1,6 +1,7 @@
 name = "exotic-telegram"
 main = "worker.js"
 compatibility_date = "2024-01-01"
+account_id = "d1a732f3e305f1a0d635796c7fac5488"
 
 # KV Namespace для хранения пользователей
 kv_namespaces = [

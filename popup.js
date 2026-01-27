@@ -1,4 +1,17 @@
-const api = globalThis.browser ?? chrome;
+// Безопасное определение API для всех браузеров
+// PC/Mac: Chrome, Firefox, Edge, Opera, Brave, Arc
+// Android: Kiwi, Mises, Samsung Internet, Firefox
+// iPhone/iPad: Orion Browser
+var api = null;
+try {
+    if (typeof browser !== 'undefined' && browser && browser.runtime) {
+        api = browser;
+    } else if (typeof chrome !== 'undefined' && chrome && chrome.runtime) {
+        api = chrome;
+    }
+} catch (e) {
+    if (typeof chrome !== 'undefined') api = chrome;
+}
 
 // ========== КОНСТАНТЫ ==========
 const AUTO_REFRESH_INTERVAL = 5000; // 5 секунд (оптимизация)
@@ -57,9 +70,9 @@ class PopupController {
 
   async checkFirstRun() {
     try {
-      const result = await chrome.storage.local.get('firstRunShown');
+      const result = await api.storage.local.get('firstRunShown');
       if (!result.firstRunShown && !this.state.license?.valid) {
-        await chrome.storage.local.set({ firstRunShown: true });
+        await api.storage.local.set({ firstRunShown: true });
         this.addActivity('👋 Добро пожаловать! Подключите Telegram', 'info');
         setTimeout(() => {
           if (confirm('Подключите Telegram для получения бесплатного пробного периода.\n\nОткрыть настройки?')) {
@@ -463,8 +476,8 @@ class PopupController {
   }
 
   openSettings() {
-    if (chrome.runtime.openOptionsPage) {
-      chrome.runtime.openOptionsPage();
+    if (api.runtime.openOptionsPage) {
+      api.runtime.openOptionsPage();
     } else {
       window.open('options.html');
     }

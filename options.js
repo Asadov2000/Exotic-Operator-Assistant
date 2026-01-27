@@ -3,7 +3,20 @@
  * Минималистичная страница настроек
  */
 
-const api = globalThis.browser ?? chrome;
+// Безопасное определение API для всех браузеров
+// PC/Mac: Chrome, Firefox, Edge, Opera, Brave, Arc
+// Android: Kiwi, Mises, Samsung Internet, Firefox
+// iPhone/iPad: Orion Browser
+var api = null;
+try {
+    if (typeof browser !== 'undefined' && browser && browser.runtime) {
+        api = browser;
+    } else if (typeof chrome !== 'undefined' && chrome && chrome.runtime) {
+        api = chrome;
+    }
+} catch (e) {
+    if (typeof chrome !== 'undefined') api = chrome;
+}
 const SERVER_URL = 'https://exotic-telegram.mabastik.workers.dev';
 
 // ========== КОНСТАНТЫ ==========
@@ -38,15 +51,26 @@ class OptionsController {
     }
 
     async loadDeviceId() {
-        const result = await api.storage.local.get(['state']);
-        this.deviceId = result.state?.settings?.deviceId;
-        
-        // Если deviceId отсутствует, он будет создан в background.js
-        if (!this.deviceId) {
-            // Генерируем временный ID для текущей сессии
-            const array = new Uint8Array(16);
-            crypto.getRandomValues(array);
-            this.deviceId = Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+        try {
+            const result = await api.storage.local.get(['state']);
+            this.deviceId = result.state?.settings?.deviceId;
+            
+            // Если deviceId отсутствует, он будет создан в background.js
+            if (!this.deviceId) {
+                // Генерируем временный ID для текущей сессии
+                // Проверяем поддержку crypto.getRandomValues (может отсутствовать на мобильных)
+                if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+                    const array = new Uint8Array(16);
+                    crypto.getRandomValues(array);
+                    this.deviceId = Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+                } else {
+                    // Fallback: используем Math.random
+                    this.deviceId = 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 15);
+                }
+            }
+        } catch (e) {
+            console.log('[Exotic] loadDeviceId error:', e.message);
+            this.deviceId = 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 15);
         }
     }
 
@@ -93,6 +117,9 @@ class OptionsController {
         document.getElementById('verifyBtn').addEventListener('click', () => this.verifyConnection());
         
         document.getElementById('testNotifyBtn').addEventListener('click', () => this.testNotification());
+        
+        // Устройства
+        document.getElementById('refreshDevicesBtn').addEventListener('click', () => this.loadDevices());
     }
 
     // ============ Copy Code ============
@@ -230,14 +257,19 @@ class OptionsController {
     showConnected(username) {
         document.getElementById('telegramNotConnected').classList.add('hidden');
         document.getElementById('telegramConnected').classList.remove('hidden');
+        document.getElementById('devicesSection').classList.remove('hidden');
         const display = String(username).startsWith('@') ? username : `@${username}`;
         document.getElementById('connectedUsername').textContent = display;
         document.getElementById('verifyStatus').textContent = '';
+        
+        // Загружаем устройства
+        this.loadDevices();
     }
 
     showNotConnected() {
         document.getElementById('telegramNotConnected').classList.remove('hidden');
         document.getElementById('telegramConnected').classList.add('hidden');
+        document.getElementById('devicesSection').classList.add('hidden');
     }
 
     // Проверка привязки на сервере
@@ -250,7 +282,7 @@ class OptionsController {
         statusEl.textContent = '';
         
         try {
-            const result = await chrome.storage.local.get(['state']);
+            const result = await api.storage.local.get(['state']);
             const settings = result.state?.settings || {};
             
             if (!settings.telegramUserId) {
@@ -304,14 +336,7 @@ class OptionsController {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     oderId: settings.telegramUserId,
-                    transaction: {
-                        transactionId: 'TEST-' + Date.now(),
-                        amount: '1 000 ₽',
-                        method: 'Тестовая заявка',
-                        created: new Date().toLocaleString('ru-RU'),
-                        requisites: '0000 0000 0000 0000',
-                        bank: 'Тест банк'
-                    }
+                    message: `🔔 <b>Тестовое уведомление</b>\n\nЕсли вы видите это сообщение, значит уведомления работают корректно!\n\n⏰ ${new Date().toLocaleString('ru-RU')}`
                 })
             });
             
@@ -339,6 +364,7 @@ class OptionsController {
         const codeEl = document.getElementById('connectCode');
         const openBotBtn = document.getElementById('openBotBtn');
         const statusEl = document.getElementById('connectionStatus');
+        const deviceNameInput = document.getElementById('deviceNameInput');
         
         btn.disabled = true;
         if (isNewCode) {
@@ -367,11 +393,20 @@ class OptionsController {
             // Генерируем oderId (уникальный ID устройства/расширения)
             const oderId = this.deviceId;
             
+            // Получаем название устройства
+            const deviceName = deviceNameInput.value.trim() || this.getDefaultDeviceName();
+            
+            // Сохраняем название устройства
+            await this.sendMessage({
+                action: 'updateSettings',
+                settings: { deviceName }
+            });
+            
             // Запрашиваем код с сервера
             const response = await fetch(`${SERVER_URL}/api/generate-code`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ oderId, deviceId: this.deviceId })
+                body: JSON.stringify({ oderId, deviceId: this.deviceId, deviceName })
             });
             
             const data = await response.json();
@@ -665,10 +700,23 @@ class OptionsController {
         }
         
         if (!license.valid) {
-            statusEl.textContent = 'Доступ истёк';
-            detailsEl.textContent = 'Обратитесь к @YaMob для продления';
-            badgeEl.textContent = '—';
-            badgeEl.className = 'license-badge';
+            // Проверяем специфические ошибки
+            if (license.error === 'MAX_DEVICES') {
+                statusEl.textContent = 'Лимит устройств';
+                detailsEl.textContent = `Максимум ${license.maxDevices || 2} устр. Удалите старое в боте.`;
+                badgeEl.textContent = '⚠️';
+                badgeEl.className = 'license-badge';
+            } else if (license.error === 'NO_LICENSE') {
+                statusEl.textContent = 'Нет лицензии';
+                detailsEl.textContent = 'Обратитесь к @YaMob для покупки';
+                badgeEl.textContent = '—';
+                badgeEl.className = 'license-badge';
+            } else {
+                statusEl.textContent = 'Доступ истёк';
+                detailsEl.textContent = 'Обратитесь к @YaMob для продления';
+                badgeEl.textContent = '—';
+                badgeEl.className = 'license-badge';
+            }
             return;
         }
         
@@ -713,6 +761,213 @@ class OptionsController {
         
         await this.sendMessage({ action: 'resetStats' });
         await this.loadStats();
+    }
+
+    // ============ Devices ============
+    getDefaultDeviceName() {
+        // Определяем платформу
+        const ua = navigator.userAgent;
+        let platform = 'Устройство';
+        
+        if (ua.includes('Windows')) platform = 'Windows';
+        else if (ua.includes('Mac')) platform = 'Mac';
+        else if (ua.includes('Linux')) platform = 'Linux';
+        else if (ua.includes('Android')) platform = 'Android';
+        else if (ua.includes('iPhone') || ua.includes('iPad')) platform = 'iOS';
+        
+        // Определяем браузер
+        let browser = '';
+        if (ua.includes('Chrome') && !ua.includes('Edg')) browser = 'Chrome';
+        else if (ua.includes('Firefox')) browser = 'Firefox';
+        else if (ua.includes('Edg')) browser = 'Edge';
+        else if (ua.includes('Safari') && !ua.includes('Chrome')) browser = 'Safari';
+        
+        return browser ? `${platform} ${browser}` : platform;
+    }
+
+    async loadDevices() {
+        const listEl = document.getElementById('devicesList');
+        const countEl = document.getElementById('devicesCount');
+        const hintEl = document.getElementById('devicesHint');
+        
+        listEl.innerHTML = '<div class="device-item"><div class="device-info"><span class="device-name">⏳ Загрузка...</span></div></div>';
+        
+        try {
+            const result = await api.storage.local.get(['state']);
+            const settings = result.state?.settings || {};
+            
+            if (!settings.telegramUserId) {
+                listEl.innerHTML = '<div class="device-item"><div class="device-info"><span class="device-name">Не подключено</span></div></div>';
+                return;
+            }
+            
+            const response = await fetch(`${SERVER_URL}/api/devices/list`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ oderId: settings.telegramUserId })
+            });
+            
+            const data = await response.json();
+            
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
+            // Сохраняем CSRF токен для критических операций
+            this.csrfToken = data.csrfToken;
+            
+            countEl.textContent = `${data.devices.length}/${data.maxDevices}`;
+            
+            if (data.devices.length === 0) {
+                listEl.innerHTML = '<div class="device-item"><div class="device-info"><span class="device-name">Нет устройств</span></div></div>';
+                hintEl.classList.add('hidden');
+                return;
+            }
+            
+            // Показываем подсказку если лимит исчерпан
+            if (data.devices.length >= data.maxDevices) {
+                hintEl.classList.remove('hidden');
+            } else {
+                hintEl.classList.add('hidden');
+            }
+            
+            listEl.innerHTML = data.devices.map(device => this.renderDeviceItem(device, settings.telegramUserId)).join('');
+            
+            // Привязываем события
+            listEl.querySelectorAll('.device-btn.rename').forEach(btn => {
+                btn.addEventListener('click', () => this.renameDevice(btn.dataset.id, btn.dataset.name));
+            });
+            
+            listEl.querySelectorAll('.device-btn.delete').forEach(btn => {
+                btn.addEventListener('click', () => this.removeDevice(btn.dataset.id, btn.dataset.name, btn.dataset.current === 'true'));
+            });
+            
+        } catch (error) {
+            console.error('Load devices error:', error);
+            listEl.innerHTML = '<div class="device-item"><div class="device-info"><span class="device-name">❌ Ошибка загрузки</span></div></div>';
+        }
+    }
+
+    renderDeviceItem(device, currentOderId) {
+        const lastSeen = device.lastSeen ? this.formatTimeAgo(device.lastSeen) : 'никогда';
+        const isCurrent = device.isCurrent;
+        
+        return `
+            <div class="device-item ${isCurrent ? 'current' : ''}">
+                <div class="device-info">
+                    <span class="device-name">
+                        ${this.escapeHtml(device.name)}
+                        ${isCurrent ? '<span class="current-badge">Это устр.</span>' : ''}
+                    </span>
+                    <span class="device-meta">Активность: ${lastSeen}</span>
+                </div>
+                <div class="device-actions">
+                    <button class="device-btn rename" data-id="${device.id}" data-name="${this.escapeHtml(device.name)}" title="Переименовать">✏️</button>
+                    <button class="device-btn delete" data-id="${device.id}" data-name="${this.escapeHtml(device.name)}" data-current="${isCurrent}" title="Удалить">🗑️</button>
+                </div>
+            </div>
+        `;
+    }
+
+    formatTimeAgo(timestamp) {
+        const diff = Date.now() - timestamp;
+        const minutes = Math.floor(diff / 60000);
+        const hours = Math.floor(diff / 3600000);
+        const days = Math.floor(diff / 86400000);
+        
+        if (minutes < 1) return 'только что';
+        if (minutes < 60) return `${minutes} ${this.pluralize(minutes, 'минуту', 'минуты', 'минут')} назад`;
+        if (hours < 24) return `${hours} ${this.pluralize(hours, 'час', 'часа', 'часов')} назад`;
+        return `${days} ${this.pluralize(days, 'день', 'дня', 'дней')} назад`;
+    }
+
+    escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    async renameDevice(deviceId, currentName) {
+        const newName = prompt('Новое название устройства:', currentName);
+        if (!newName || newName === currentName) return;
+        
+        if (newName.length > 30) {
+            alert('Название слишком длинное (максимум 30 символов)');
+            return;
+        }
+        
+        try {
+            const result = await api.storage.local.get(['state']);
+            const settings = result.state?.settings || {};
+            
+            const response = await fetch(`${SERVER_URL}/api/devices/rename`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    oderId: settings.telegramUserId,
+                    deviceIdToRename: deviceId,
+                    newName
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.error) {
+                if (data.error === 'NAME_ALREADY_EXISTS') {
+                    alert('Устройство с таким именем уже существует');
+                } else {
+                    alert('Ошибка: ' + data.error);
+                }
+                return;
+            }
+            
+            await this.loadDevices();
+            
+        } catch (error) {
+            console.error('Rename device error:', error);
+            alert('Ошибка переименования');
+        }
+    }
+
+    async removeDevice(deviceId, deviceName, isCurrent) {
+        const confirmMsg = isCurrent 
+            ? `Удалить текущее устройство "${deviceName}"?\n\nВам придётся подключиться заново.`
+            : `Удалить устройство "${deviceName}"?`;
+        
+        if (!confirm(confirmMsg)) return;
+        
+        try {
+            const result = await api.storage.local.get(['state']);
+            const settings = result.state?.settings || {};
+            
+            const response = await fetch(`${SERVER_URL}/api/devices/remove`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    oderId: settings.telegramUserId,
+                    deviceIdToRemove: deviceId,
+                    csrfToken: this.csrfToken // CSRF защита
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.error) {
+                alert('Ошибка: ' + data.error);
+                return;
+            }
+            
+            if (isCurrent) {
+                // Если удалили текущее устройство - разлогиниваем
+                await this.disconnectTelegram();
+            } else {
+                await this.loadDevices();
+            }
+            
+        } catch (error) {
+            console.error('Remove device error:', error);
+            alert('Ошибка удаления');
+        }
     }
 
     // ============ Messaging ============

@@ -34,6 +34,11 @@
                     <h3 class="telegram-title">Подключите Telegram</h3>
                     <p class="telegram-desc">Получите 24 часа бесплатного доступа</p>
                     
+                    <div class="device-name-container">
+                        <input type="text" id="deviceNameInput" class="device-name-input" placeholder="Название устройства (напр. Рабочий ПК)" maxlength="30">
+                        <span class="device-name-hint">Для удобства различия устройств</span>
+                    </div>
+                    
                     <div class="code-container">
                         <div class="telegram-code" id="connectCode" title="Нажмите чтобы скопировать">--------</div>
                         <span class="copy-hint" id="copyHint">📋 Скопировано!</span>
@@ -75,6 +80,21 @@
                     </div>
                     <button class="btn btn-danger btn-full-spaced" id="disconnectBtn">Отключить</button>
                 </div>
+            </div>
+        </section>
+
+        <!-- Devices Section -->
+        <section class="options-section hidden" id="devicesSection">
+            <h2 class="options-section-title">Устройства</h2>
+            <div class="options-group">
+                <div class="devices-header">
+                    <span class="devices-count" id="devicesCount">0/0</span>
+                    <button class="btn btn-secondary btn-small" id="refreshDevicesBtn" title="Обновить список">🔄</button>
+                </div>
+                <div class="devices-list" id="devicesList">
+                    <!-- Устройства будут добавлены динамически -->
+                </div>
+                <p class="options-hint" id="devicesHint">💡 Удалите старое устройство чтобы добавить новое</p>
             </div>
         </section>
 

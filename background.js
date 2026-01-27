@@ -1,4 +1,19 @@
-const api = globalThis.browser ?? chrome;
+// Безопасное определение API для всех браузеров
+// PC/Mac: Chrome, Firefox, Edge, Opera, Brave, Arc
+// Android: Kiwi, Mises, Samsung Internet, Firefox
+// iPhone/iPad: Orion Browser (единственный с поддержкой Chrome-расширений)
+var api = null;
+try {
+    // Firefox/Orion используют 'browser', Chrome-based - 'chrome'
+    if (typeof browser !== 'undefined' && browser && browser.runtime) {
+        api = browser;
+    } else if (typeof chrome !== 'undefined' && chrome && chrome.runtime) {
+        api = chrome;
+    }
+} catch (e) {
+    // Fallback для старых браузеров
+    if (typeof chrome !== 'undefined') api = chrome;
+}
 
 // ========== КОНСТАНТЫ (из constants.js) ==========
 const TELEGRAM_SERVER = 'https://exotic-telegram.mabastik.workers.dev';
@@ -304,13 +319,17 @@ class BackgroundService {
         type: data.type || null,
         expiresAt: data.expiresAt || null,
         daysLeft: data.daysLeft || 0,
+        maxDevices: data.maxDevices || null,
         lastCheck: Date.now(),
         error: data.valid ? null : data.error
       };
 
       if (!data.valid && this.state.enabled) {
         this.state.enabled = false;
-        await this.sendTabNotification('Лицензия неактивна', 'Проверьте статус лицензии в настройках Exotic Assistant.');
+        const errorMsg = data.error === 'MAX_DEVICES' 
+          ? `Лимит устройств исчерпан (макс. ${data.maxDevices}). Удалите старое устройство в боте.`
+          : 'Проверьте статус лицензии в настройках Exotic Assistant.';
+        await this.sendTabNotification('Лицензия неактивна', errorMsg);
       }
 
       this.scheduleSave();
